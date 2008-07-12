@@ -1,7 +1,7 @@
 (* FIXME: diid overflow must be catched *)
 
 type direction = Start | East | North | West | South
-type field_state = Free | Partially_Equipped | Partially_Known | Unknown
+type field_state = Free | Partially_Free | Occupied | Unknown
     
 type field = {
   mutable state: field_state;
@@ -135,35 +135,43 @@ let dijkstra_find_path board origin dest =
      and dx,dy = dest
      and check_neighbours f x y =
       let relax s d dx dy dir =
-	let negdir = neg_dir dir
-	  (* calculate cost bonuses and maluses in here *)
-	in let n = param_base_cost + d.enemy_penalty +
-	    (match s.dijkstra_prev with
-		 x when x = negdir -> (-2) (* keeping diretion -> bonus *)
-	       | x when x = dir -> 2 (* u-turn -> malus *)
-	       | _ -> 0)
-	in
-	  if d.dijkstra_round < !diid then begin
-	    d.dijkstra_round <- !diid;
-	    d.dijkstra_cost <- s.dijkstra_cost + n;
-	    d.dijkstra_prev <- negdir;
-	    queue_insert queue (d.dijkstra_cost, (d, dx, dy));
-	  end else (* already visited, check if new way is better *)
-	    if (s.dijkstra_cost + n) < d.dijkstra_cost then begin
-	      (* we found a better way! *)
-	      queue_remove queue (d.dijkstra_cost, (d, dx, dy));
+	if d.state = Unknown || d.state = Occupied then
+	  (* skip unkown and occupied fields *)
+	  ()
+	else
+	  let negdir = neg_dir dir
+	    (* calculate cost bonuses and maluses in here *)
+	  in let n = param_base_cost +
+	      (match d.state with
+		   Partially_Free -> 30
+		 | _ -> 0) +
+	      d.enemy_penalty +
+	      (match s.dijkstra_prev with
+		   x when x = negdir -> (-2) (* keeping diretion -> bonus *)
+		 | x when x = dir -> 2 (* u-turn -> malus *)
+		 | _ -> 0)
+	  in
+	    if d.dijkstra_round < !diid then begin
+	      d.dijkstra_round <- !diid;
 	      d.dijkstra_cost <- s.dijkstra_cost + n;
 	      d.dijkstra_prev <- negdir;
 	      queue_insert queue (d.dijkstra_cost, (d, dx, dy));
-	    end
+	    end else (* already visited, check if new way is better *)
+	      if (s.dijkstra_cost + n) < d.dijkstra_cost then begin
+		(* we found a better way! *)
+		queue_remove queue (d.dijkstra_cost, (d, dx, dy));
+		d.dijkstra_cost <- s.dijkstra_cost + n;
+		d.dijkstra_prev <- negdir;
+		queue_insert queue (d.dijkstra_cost, (d, dx, dy));
+	      end
       in
-	if x < (board.xdim - 1) && board.fields.(y).(x+1).state != Unknown then
+	if x < (board.xdim - 1) then
 	  relax f board.fields.(y).(x+1) (x+1) y East;
-	if y < (board.ydim - 1) && board.fields.(y+1).(x).state != Unknown then
+	if y < (board.ydim - 1) then
 	  relax f board.fields.(y+1).(x) x (y+1) North;
-	if x > 0 && board.fields.(y).(x-1).state != Unknown then
+	if x > 0 then
 	  relax f board.fields.(y).(x-1) (x-1) y West;
-	if y > 0 && board.fields.(y-1).(x).state != Unknown then
+	if y > 0 then
 	  relax f board.fields.(y-1).(x) x (y-1) South;
   in let start_field = board.fields.(oy).(ox)
   in
