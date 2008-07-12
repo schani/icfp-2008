@@ -40,6 +40,8 @@ type world = {
   world_init:initialization; 
   world_vehicle_state:vehicle_state;
   world_straight_max:float;
+  world_min_speed:int;
+  world_dst:int*int;
 }
      
 

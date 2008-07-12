@@ -5,12 +5,12 @@ let dir_of_turn w turn =
   if abs_float (turn) < w.world_straight_max then 
     Straight
   else if turn > 0. then
-    if turn > w.world_init.imax_turn then 
+    if turn /. w.world_init.imax_turn > 5. then 
       HardLeft
     else
       Left
   else     
-    if turn < (-. w.world_init.imax_turn) then 
+    if (-. turn) /. w.world_init.imax_turn > 5. then 
       HardRight
     else
       Right
@@ -53,7 +53,7 @@ let evade_objs w t turn objs =
   let ahead = find_all_blocking_objs t turn objs in 
   let x = List.length ahead in
   
-  Printf.fprintf stderr "Found %d bad craters EVVVVVVVVVVVVVVVVVVVAAAAAAAAAAAAAAAAAAAAAADEEEEEEEEEEEEEEEEEEEEE!\n" x;
+  Printf.fprintf stderr "Found %d bad craters!\n" x;
 
   let distfromme o = Geometry.distanceSq mypos (o.bcx,o.bcy) in
   let ahead = List.sort (fun a b -> (distfromme a)-(distfromme b) ) ahead in
@@ -63,7 +63,14 @@ let evade_objs w t turn objs =
   let badpos = (badguy.bcx,badguy.bcy) in
 
   let badvec = Geometry.rel_pos mypos badpos in
-  let norm = Geometry.scale_vec (Geometry.norm_vec badvec) (badguy.bcr+2000) in
+  
+  let normvec = 
+    if Geometry.angle_left_of t.dir (Geometry.angle_to_point mypos badpos) then
+      Geometry.norm_vec_left 
+    else
+      Geometry.norm_vec_right
+  in
+  let norm = Geometry.scale_vec (normvec badvec) (badguy.bcr+2000) in
   let evade_dst = Geometry.abs_pos mypos (Geometry.abs_pos badvec norm) in
   
 
@@ -77,34 +84,55 @@ let evade_objs w t turn objs =
   
   let evade_angle = Geometry.rel_angle_to_point t.dir mypos evade_dst in
   Printf.fprintf stderr "evading to %f (%d craters ahead) \n" evade_angle x;
-  dir_of_turn w evade_angle
+  
+  let speeding = 
+    if t.speed*t.speed > 3*(Geometry.distanceSq mypos badpos) then 
+      Breaking
+    else if t.speed*t.speed > (Geometry.distanceSq mypos badpos) then 
+      Rolling
+    else
+      Accelerating
+  in
+  speeding,(dir_of_turn w evade_angle)
    
  
 let great_decision_procedure w t = 
-  let dst = (0,0) in
+  let dst = w.world_dst in
   let objs =  (List.append t.craters t.boulders) in
   let turn = Geometry.rel_angle_to_point t.dir (t.x,t.y) dst in
   flush stderr;
   let want_dir = dir_of_turn w turn in
+  
   if obj_ahead_p t turn objs then 
-    Accelerating,(evade_objs w t turn objs)
+    evade_objs w t turn objs
   else
     Accelerating,want_dir
 
       
 let precalculation_hook x = x
 
+let check_speed world t (wantspeed,wantturn) = 
+  if t.speed < world.world_min_speed then
+    Accelerating,wantturn
+  else if (Geometry.distanceSq (t.x,t.y) world.world_dst) < t.speed*t.speed then
+    Breaking,wantturn
+  else
+    wantspeed,wantturn
+    
+
 let stupid_loop_one_game socket = 
-  
   let _ = Communication.waitfordata socket in
   let init = match Communication.sock_recv_next socket with
     | Some(x) -> x
     | None -> failwith "zeugs"
   in
+  let init = initialization_of_string init in
   let world = {
-    world_init = initialization_of_string init; 
+    world_init = init;
     world_vehicle_state = Breaking,Straight;
     world_straight_max = 0.1;
+    world_min_speed = (init.imax_sensor / 10); 
+    world_dst = 0,0;
   }
   in
   
@@ -131,10 +159,14 @@ let stupid_loop_one_game socket =
 	  let world = merge_telemetry_into_world world t in
 	  let wantedstate = great_decision_procedure world t in
 	  
-	  Printf.fprintf stderr "\nWant: %s\n Have: %s\nReported: %s\n" 
-	    (string_of_state wantedstate) 
-	    (string_of_state world.world_vehicle_state) 
-	    (string_of_state (t.speeding,t.turning));
+	  let wantedstate = check_speed world t wantedstate in
+	  
+	  (* 
+	     Printf.fprintf stderr "\nWant: %s\n Have: %s\nReported: %s\n" 
+	     (string_of_state wantedstate) 
+	     (string_of_state world.world_vehicle_state) 
+	     (string_of_state (t.speeding,t.turning));
+	  *)
 	  
 	  let command = Statemachines.both_change_to world.world_vehicle_state wantedstate in
 	  let world = {world with world_vehicle_state = (apply_command command world.world_vehicle_state)} in
