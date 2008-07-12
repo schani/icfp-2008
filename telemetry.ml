@@ -146,3 +146,4 @@ let initialization_of_string str =
 	    _ -> failwith "initialization_of_string: illegal number in msg"
       end
     | _ -> failwith "initialization_of_string: got venusian message"
+
