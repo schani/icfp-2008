@@ -5,6 +5,7 @@ type field_state = Known | Partially | Unknown
     
 type field = {
   mutable state: field_state;
+  mutable bouldercraters: Telemetry.bouldercrater list;
   mutable enemy_penalty: int; (* pentalty of martians *)
   mutable dijkstra_cost: int; (* stores tmp values for calculation *)
   mutable dijkstra_round: int; (* stores in which round the field was
@@ -43,6 +44,7 @@ let create_board x y =
     ydim = y;
     fields = make_array_array x y {
       state = Unknown;
+      bouldercraters = [];
       enemy_penalty = 0;
       dijkstra_cost = 0;
       dijkstra_round = 0;
@@ -84,12 +86,22 @@ let rec martian_modify b x y p r =
   end
 
 (* API: use this to register martians *)
-let register_martian board x y =
-    martian_modify board x y param_martian_core_penalty 1
-    
+let register_martian board x y m =
+  martian_modify board x y param_martian_core_penalty 1
+
 (* API: use this to unregister martians *)
 let unregister_martian board x y =
-    martian_modify board x y (-1 * param_martian_core_penalty) 1
+  martian_modify board x y (-1 * param_martian_core_penalty) 1
+
+(* API: use this to register a bouldercrater *)
+let register_bouldercrater board x y bc =
+  if not (List.mem bc board.fields.(y).(x).bouldercraters) then
+    board.fields.(y).(x).bouldercraters <-
+      bc :: board.fields.(y).(x).bouldercraters
+
+(* API: use this to query bouldercraters *)
+let query_bouldercraters board x y =
+  board.fields.(y).(x).bouldercraters
 
 module PriSetEntry =
   struct
