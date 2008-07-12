@@ -3,6 +3,8 @@ open Statemachines
 type vehicle_state_speed = Statemachines.speedingmachinestates
 type vehicle_state_turning = Statemachines.turningmachinestates
 
+type vehicle_state = speedingmachinestates * turningmachinestates
+
 type bctypes = Boulder | Crater
 type bouldercrater = {bctype:bctypes;bcx:int;bcy:int;bcr:int}
 
@@ -33,6 +35,13 @@ type initialization = {
   imax_turn:float;
   imax_hard_turn:float;
 }
+
+type world = {
+  world_init:initialization; 
+  world_vehicle_state:vehicle_state;
+  world_straight_max:float;
+}
+     
 
 let spaceregex = Str.regexp " " 
 
@@ -126,7 +135,27 @@ let event_of_string str =
 let is_telemetry str = 
   (str.[0] == 'T')
 
-let merge_telemetry_into_world x t = x
+
+let merge_telemetry_into_world w t = 
+  if t.timestamp = 0 then
+    {w with world_vehicle_state = (t.speeding,t.turning)}
+  else
+    w
+  
+let string_of_state (s,t) = 
+  (
+    match s with 
+      | Breaking -> "B"
+      | Rolling -> "-"
+      | Accelerating -> "A"
+  )^(
+    match t with 
+      | HardRight -> "R"
+      | Right -> "r"
+      | Straight -> "-"
+      | Left -> "l"
+      | HardLeft -> "L"
+  )
 
 let initialization_of_string str =
   match (Str.split spaceregex str) with

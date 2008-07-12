@@ -2,15 +2,15 @@ open Statemachines
 open Telemetry
 
 let dir_of_turn w turn = 
-  if turn = 0. then 
+  if abs_float (turn) < w.world_straight_max then 
     Straight
   else if turn > 0. then
-    if turn > w.imax_hard_turn then 
+    if turn > w.world_init.imax_turn then 
       HardLeft
     else
       Left
   else     
-    if turn < (-. w.imax_hard_turn) then 
+    if turn < (-. w.world_init.imax_turn) then 
       HardRight
     else
       Right
@@ -92,7 +92,6 @@ let great_decision_procedure w t =
     Accelerating,want_dir
 
       
-      
 let precalculation_hook x = x
 
 let stupid_loop_one_game socket = 
@@ -102,8 +101,12 @@ let stupid_loop_one_game socket =
     | Some(x) -> x
     | None -> failwith "zeugs"
   in
-  let world = initialization_of_string init in
-
+  let world = {
+    world_init = initialization_of_string init; 
+    world_vehicle_state = Breaking,Straight;
+    world_straight_max = 0.1;
+  }
+  in
   
   let rec loop world = 
     if not (Communication.is_dataavailable socket) then
@@ -128,8 +131,13 @@ let stupid_loop_one_game socket =
 	  let world = merge_telemetry_into_world world t in
 	  let wantedstate = great_decision_procedure world t in
 	  
-	  (* this might result in awful slingering if requested is left or right and communication becomes an issue*)
-	  let command = Statemachines.both_change_to (t.speeding,t.turning) wantedstate in
+	  Printf.fprintf stderr "\nWant: %s\n Have: %s\nReported: %s\n" 
+	    (string_of_state wantedstate) 
+	    (string_of_state world.world_vehicle_state) 
+	    (string_of_state (t.speeding,t.turning));
+	  
+	  let command = Statemachines.both_change_to world.world_vehicle_state wantedstate in
+	  let world = {world with world_vehicle_state = (apply_command command world.world_vehicle_state)} in
 	  Communication.sock_send socket (command2string command);
 	  loop world
 	end

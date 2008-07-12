@@ -58,3 +58,25 @@ let command2string = function speed,turn ->
   (Printf.fprintf stderr "%s\n" x);
   x
 
+let apply_command (speedcmd,turncmd) (speeding,turning) = 
+  let newspeeding = 
+    match speeding,speedcmd with
+      | Accelerating, Break -> Rolling
+      | Rolling, Break -> Breaking
+      | Rolling, Accelerate -> Accelerating
+      | Breaking, Accelerate -> Rolling
+      | _ -> speeding
+  in
+  let newturning = 
+    match turning,turncmd with
+      | HardLeft, TurnRight -> Left
+      | Left, TurnRight -> Straight
+      | Left, TurnLeft -> HardLeft
+      | Straight, TurnRight -> Right
+      | Straight, TurnLeft -> Left
+      | Right, TurnRight -> HardRight
+      | Right, TurnLeft -> Straight
+      | HardRight, TurnLeft -> Right
+      | _ -> turning
+  in
+  newspeeding,newturning
