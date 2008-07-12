@@ -20,7 +20,10 @@ type board = {
 }
 
 let param_base_cost = 10
- 
+let param_martian_core_penalty = 50
+let param_martian_penalty_radius = 3
+let param_martian_penalty_decrementer = 12
+
 let neg_dir = function
     East -> West
   | North -> South
@@ -33,6 +36,7 @@ let neg_dir = function
 let make_array_array x y z =
   Array.init y (fun _ -> Array.make x z)
 
+(* API: use this to create a new board *)
 let create_board x y =
   {
     xdim = x;
@@ -55,8 +59,37 @@ let incr_coords (x,y) = function
       Printf.fprintf stderr "discrete.neg_dir: error: called with start";
       x,y
 
-(* dijkstra round id: stores the current round *)
-let diid = ref 0
+let martian_add b x y p =
+  if x >= 0 && x < b.xdim && y >= 0 && y < b.ydim then
+    b.fields.(y).(x).enemy_penalty <- b.fields.(y).(x).enemy_penalty + p
+
+let martian_quadcircle b x y r p =
+  for xi = x - r to x + r
+  do
+    martian_add b xi (y - r) p;
+    martian_add b xi (y + r) p;
+  done;
+  for yi = y - r + 1 to y + r - 1
+  do
+    martian_add b (x - r) yi p;
+    martian_add b (x + r) yi p;
+  done
+
+let rec martian_modify b x y p r =
+  if r > param_martian_penalty_radius then
+    ()
+  else begin
+    martian_quadcircle b x y r p;
+    martian_modify b x y (p - param_martian_penalty_decrementer) (r + 1)
+  end
+
+(* API: use this to register martians *)
+let register_martian board x y =
+    martian_modify board x y param_martian_core_penalty 1
+    
+(* API: use this to unregister martians *)
+let unregister_martian board x y =
+    martian_modify board x y (-1 * param_martian_core_penalty) 1
 
 module PriSetEntry =
   struct
@@ -66,7 +99,7 @@ module PriSetEntry =
   end
 
 module PriSet = Set.Make(PriSetEntry)
-  
+
 let queue_insert q e =
   q := PriSet.add e !q
 
@@ -79,6 +112,11 @@ let queue_fetch_cheapest q =
 let queue_remove q e =
     q := PriSet.remove e !q
 
+
+(* dijkstra round id: stores the current round *)
+let diid = ref 0
+
+(* API: use this to find a way to a destination *)
 let dijkstra_find_path board origin dest =
   let queue = ref PriSet.empty
   in let ox,oy = origin
