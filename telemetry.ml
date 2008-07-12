@@ -54,14 +54,16 @@ let parsefixpoint factor string =
 
   
 let telemetry_of_string str = 
-  let rec parse_rest list t = 
+  let rec parse_rest list t = t
+    (*
     match list with 
       | [] -> t
       | "b"::x::y::r:tl -> let b = {bcx=x;bcy=y;bcr=r}::t.boulders in
 	parse_rest tl {t with boulders=b}
       | "c"::x::y::r:tl -> let b = {bcx=x;bcy=y;bcr=r}::t.craters in
 	parse_rest tl {t with craters=c}
-    
+    *)
+  in
 
   let list = Str.split spaceregex str in 
   let tele = 
