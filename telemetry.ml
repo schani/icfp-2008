@@ -23,6 +23,16 @@ type telemetry = {
   martians:martian list;
 }
 
+type initialization = {
+  idx:int;
+  idy:int;
+  itime_limit:int;
+  imin_sensor:int;
+  imax_sensor:int;
+  imax_speed:int;
+  imax_turn:int;
+  imax_hard_turn:int;
+}
 
 let spaceregex = Str.regexp " " 
 
@@ -115,3 +125,21 @@ let event_of_string str =
 let is_telemetry str = 
   (str.[0] == 'T')
 
+let initialization_of_string str =
+  match (Str.split spaceregex str) with
+    | "I"::dx::dy::t_lim::mins::maxs::maxv::maxt::maxht::[] -> begin
+	try
+	  {
+	    idx = parsefixpoint 1000 dx;
+	    idy = parsefixpoint 1000 dy;
+	    itime_limit = int_of_string t_lim;
+	    imin_sensor = parsefixpoint 1000 mins;
+	    imax_sensor = parsefixpoint 1000 maxs;
+	    imax_speed = parsefixpoint 1000 maxv;
+	    imax_turn = parsefixpoint 10 maxt;
+	    imax_hard_turn = parsefixpoint 10 maxht;
+	  }
+	with
+	    _ -> failwith "initialization_of_string: illegal number in msg"
+      end
+    | _ -> failwith "initialization_of_string: got venusian message"
