@@ -1,7 +1,7 @@
 (* FIXME: diid overflow must be catched *)
 
 type direction = Start | East | North | West | South
-type field_state = Known | Partially | Unknown
+type field_state = Free | Partially_Equipped | Partially_Known | Unknown
     
 type field = {
   mutable state: field_state;
