@@ -3,12 +3,12 @@ open Statemachines
 type vehicle_state_speed = Statemachines.speedingmachinestates
 type vehicle_state_turning = Statemachines.turningmachinestates
 
-type bctypes = Bolder | Crater
+type bctypes = Boulder | Crater
 type bouldercrater = {bctype:bctypes;bcx:int;bcy:int;bcr:int}
 
 type martian = {ex:int;ey:int;edir:int;espeed:int}
 
-type event = Crater | BoulderHit | Killed | Success | Scored of int
+type event = CraterFall | BoulderHit | Killed | Success | Scored of int
 
 type telemetry = {
   timestamp:int;
@@ -54,15 +54,29 @@ let parsefixpoint factor string =
 
   
 let telemetry_of_string str = 
-  let rec parse_rest list t = t
-    (*
+  let rec parse_rest list t = 
     match list with 
       | [] -> t
-      | "b"::x::y::r:tl -> let b = {bcx=x;bcy=y;bcr=r}::t.boulders in
+      | "b"::x::y::r::tl -> let b = {
+	  bctype = Boulder;
+	  bcx=(parsefixpoint 1000 x);
+	  bcy=(parsefixpoint 1000 y);
+	  bcr=(parsefixpoint 1000 r)}::t.boulders in
 	parse_rest tl {t with boulders=b}
-      | "c"::x::y::r:tl -> let b = {bcx=x;bcy=y;bcr=r}::t.craters in
+      | "c"::x::y::r::tl -> let c = {
+	  bctype = Crater;
+	  bcx=(parsefixpoint 1000 x);
+	  bcy=(parsefixpoint 1000 y);
+	  bcr=(parsefixpoint 1000 r)}::t.craters in
 	parse_rest tl {t with craters=c}
-    *)
+      | "m"::x::y::dir::speed::tl -> let m = {
+	  ex=(parsefixpoint 1000 x);
+	  ey=(parsefixpoint 1000 y);
+	  edir=(parsefixpoint 10 dir);
+	  espeed=(parsefixpoint 1000 speed)
+	}::t.martians in
+	parse_rest tl {t with martians=m}
+      | _ -> failwith "parse_rest"
   in
 
   let list = Str.split spaceregex str in 
@@ -91,7 +105,7 @@ let telemetry_of_string str =
 let event_of_string str = 
   let list = Str.split spaceregex str in
   match list with 
-    | ["C"; _] -> Crater
+    | ["C"; _] -> CraterFall
     | ["B"; _] -> BoulderHit
     | ["K"; _] -> Killed
     | ["S"; _] -> Success
@@ -101,56 +115,3 @@ let event_of_string str =
 let is_telemetry str = 
   (str.[0] == 'T')
 
-
-let wanted = ref (Accelerating,Straight) 
-
-let stupid_loop_one_game socket = 
-  
-  let _ = Communication.waitfordata socket in
-  let init = Communication.sock_recv_next socket in 
-  (match init with 
-    | None -> failwith " IOFOOF ";
-    | _ -> ignore(init););
-  Printf.fprintf stderr "ignoring init for now\n";
-  
-  let rec loop () = 
-    let _ = Communication.waitfordata socket in
-    let next = 
-      match Communication.sock_recv_next socket with 
-	| Some(x) -> x
-	| None -> (Printf.fprintf stderr "hoscherei\n"; loop ()) 
-    in 
-    if not (is_telemetry next) then 
-      (Printf.fprintf stderr "Event: %s\n" next;flush stderr;
-      match event_of_string next with
-	| Scored x -> Printf.fprintf stdout "We have scored %d points!" x; loop ()
-	| _ -> loop ())
-    else
-      let t = telemetry_of_string next in
-      
-      if t.timestamp >= 13*1000 then
-	wanted := (Accelerating,Left)
-      else
-	();
-      if t.timestamp >= 16*1000 then
-	wanted := (Accelerating,Right)
-      else
-	();
-      
-      (* this might result in awful slingering if requested is left or right and communication becomes an issue*)
-      let command = Statemachines.both_change_to (t.speeding,t.turning) !wanted in
-      Communication.sock_send socket (command2string command);
-      loop ()
-  in
-  loop ()
-  
-    
-let main = 
-  try
-    (* Communication.open_connection (Sys.argv.(0)) (int_of_string
-       Sys.argv.(1)) *)
-    let socket = Communication.connect "localhost" 17676 in
-    stupid_loop_one_game socket 
-  with Unix.Unix_error(code,_,_) as e -> Printf.fprintf stderr "%s\n" (Unix.error_message code);
-    raise e
-  
