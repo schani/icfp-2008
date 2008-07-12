@@ -94,17 +94,6 @@ let vec_add  (x1,y1) (x2,y2) =
   (x1+x2)/2,(y1+y2)/2
     
 
-let avg_direction mypos waypoints = 
-  let rec loop sum = function
-    | [] -> sum 
-    | waypoint::tl -> 
-	let sum = vec_add (rel_pos mypos waypoint) sum in
-	loop sum tl
-  in
-  loop 0,0 waypoints
-
-
-
 
 (* calculate relative (to direction towards center) angle to pass by circle *)
 let passing_angle mypos center radius = 
