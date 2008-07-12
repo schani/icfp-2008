@@ -17,6 +17,8 @@ type field = {
 type board = {
   xdim: int;
   ydim: int;
+  fxdim: int;
+  fydim: int;
   fields: (field array) array;
 }
 
@@ -38,10 +40,12 @@ let make_array_array x y z =
   Array.init y (fun _ -> Array.make x z)
 
 (* API: use this to create a new board *)
-let create_board x y =
+let create_board x y fx fy =
   {
     xdim = x;
     ydim = y;
+    fxdim = fx;
+    fydim = fy;
     fields = make_array_array x y {
       state = Unknown;
       bouldercraters = [];
@@ -60,6 +64,23 @@ let incr_coords (x,y) = function
   | Start ->
       Printf.fprintf stderr "discrete.neg_dir: error: called with start";
       x,y
+
+let discretize_coords board (fx,fy) =
+  (board.xdim * fx / board.fxdim + board.xdim / 2,
+   board.ydim * fy / board.fydim + board.ydim /
+     
+(* tests:
+  discretize_coords { xdim = 9; ydim = 9; fxdim = 90; fydim = 90 } (0,0)
+
+  discretize_coords { xdim = 9; ydim = 9; fxdim = 90; fydim = 90 } (-50,-50)
+  
+  discretize_coords { xdim = 9; ydim = 9; fxdim = 90; fydim = 90 } (39,40)
+*)
+
+2)
+
+    
+
 
 let martian_add b x y p =
   if x >= 0 && x < b.xdim && y >= 0 && y < b.ydim then
