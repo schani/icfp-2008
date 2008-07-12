@@ -54,5 +54,7 @@ let speed2string = function
   | Nochange -> ""
 
 let command2string = function speed,turn -> 
-  (speed2string speed)^(turn2string turn)^";"
+  let x = (speed2string speed)^(turn2string turn)^";" in
+  (Printf.fprintf stderr "%s\n" x);
+  x
 

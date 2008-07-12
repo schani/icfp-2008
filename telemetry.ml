@@ -6,7 +6,7 @@ type vehicle_state_turning = Statemachines.turningmachinestates
 type bctypes = Boulder | Crater
 type bouldercrater = {bctype:bctypes;bcx:int;bcy:int;bcr:int}
 
-type martian = {ex:int;ey:int;edir:int;espeed:int}
+type martian = {ex:int;ey:int;edir:float;espeed:int}
 
 type event = CraterFall | BoulderHit | Killed | Success | Scored of int
 
@@ -16,7 +16,7 @@ type telemetry = {
   turning:vehicle_state_turning;
   x:int;
   y:int;
-  dir:int;
+  dir:float;
   speed:int;
   boulders:bouldercrater list;
   craters:bouldercrater list;
@@ -30,8 +30,8 @@ type initialization = {
   imin_sensor:int;
   imax_sensor:int;
   imax_speed:int;
-  imax_turn:int;
-  imax_hard_turn:int;
+  imax_turn:float;
+  imax_hard_turn:float;
 }
 
 let spaceregex = Str.regexp " " 
@@ -82,11 +82,12 @@ let telemetry_of_string str =
       | "m"::x::y::dir::speed::tl -> let m = {
 	  ex=(parsefixpoint 1000 x);
 	  ey=(parsefixpoint 1000 y);
-	  edir=(parsefixpoint 10 dir);
+	  edir=(float_of_string dir);
 	  espeed=(parsefixpoint 1000 speed)
 	}::t.martians in
 	parse_rest tl {t with martians=m}
-      | _ -> failwith "parse_rest"
+      | "h"::x::y::r::tl -> parse_rest tl t
+      | _ -> failwith ("parse_rest "^str^" hd="^(List.hd list))
   in
 
   let list = Str.split spaceregex str in 
@@ -99,7 +100,7 @@ let telemetry_of_string str =
 	    turning=(ctl2turning ctl);
 	    x=(parsefixpoint 1000 x);
 	    y=(parsefixpoint 1000 y);
-	    dir=(parsefixpoint 10 dir);
+	    dir=(float_of_string dir);
 	    speed=(parsefixpoint 1000 speed);
 	    boulders=[];
 	    craters=[];
@@ -138,8 +139,8 @@ let initialization_of_string str =
 	    imin_sensor = parsefixpoint 1000 mins;
 	    imax_sensor = parsefixpoint 1000 maxs;
 	    imax_speed = parsefixpoint 1000 maxv;
-	    imax_turn = parsefixpoint 10 maxt;
-	    imax_hard_turn = parsefixpoint 10 maxht;
+	    imax_turn = float_of_string maxt;
+	    imax_hard_turn = float_of_string maxht;
 	  }
 	with
 	    _ -> failwith "initialization_of_string: illegal number in msg"

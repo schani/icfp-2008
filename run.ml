@@ -1,21 +1,27 @@
 open Statemachines
 open Telemetry
 
+let dir_of_turn w turn = 
+  if turn = 0. then 
+    Straight
+  else if turn > 0. then
+    if turn > w.imax_turn then 
+      HardLeft
+    else
+      Left
+  else     
+    if turn < (-.w.imax_turn) then 
+      HardRight
+    else
+      Right
 
 let great_decision_procedure w t = 
-  let wanted = 
-    if t.timestamp >= 13*1000 then
-      (Accelerating,Left)
-    else
-      (Accelerating,Straight)
-  in
-  let wanted = 
-    if t.timestamp >= 16*1000 then
-      (Accelerating,Right)
-    else
-      wanted
-  in
-  wanted
+  let angle = Geometry.angle_to_point (t.x,t.y) (0,0) in
+  let turn = Geometry.turn_towards_dstangle angle t.dir  in
+  Printf.fprintf stderr "angle %f dir %f turn %f\n" angle t.dir turn; 
+  flush stderr;
+  let want_dir = dir_of_turn w turn in
+  Accelerating,want_dir
 
 let precalculation_hook x = x
 
