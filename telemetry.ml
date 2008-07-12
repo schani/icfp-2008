@@ -125,6 +125,8 @@ let event_of_string str =
 let is_telemetry str = 
   (str.[0] == 'T')
 
+let merge_telemetry_into_world x t = x
+
 let initialization_of_string str =
   match (Str.split spaceregex str) with
     | "I"::dx::dy::t_lim::mins::maxs::maxv::maxt::maxht::[] -> begin
