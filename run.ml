@@ -153,6 +153,8 @@ let world_init socket =
       world_straight_max = 0.1;
       world_min_speed = (init.imax_sensor / 10); 
       world_dst = 0,0;
+      world_board = Discrete.create_board 200 200 init.idx init.idy
+	init.imin_sensor init.imax_sensor;
     }
 
 let world_step world socket =

@@ -1,37 +1,6 @@
 (* FIXME: diid overflow must be catched *)
 
-type direction = Start | East | North | West | South
-type field_state = Free | Partially_Free | Occupied | Unknown
-    
-type field = {
-  mutable state: field_state;
-  mutable bouldercraters: Telemetry.bouldercrater list;
-  mutable enemy_penalty: int; (* pentalty of martians *)
-  mutable dijkstra_cost: int; (* stores tmp values for calculation *)
-  mutable dijkstra_round: int; (* stores in which round the field was
-				  calculated last *)
-  mutable dijkstra_prev: direction;
-  (* stores previous field to accelerate result *)
-}
-
-module BCRecorderEntry =
-  struct
-    type t = int * int
-    let compare = Pervasives.compare
-  end
-
-module BCRecorder = Set.Make(BCRecorderEntry)
-
-type board = {
-  xdim: int;
-  ydim: int;
-  fxdim: int;
-  fydim: int;
-  minsens: int;
-  maxsens: int;
-  fields: (field array) array;
-  mutable bcrecorder: Set.Make(BCRecorderEntry).t;
-}
+open Telemetry
 
 let pi = 3.1415926535897932384626433
   
@@ -89,10 +58,10 @@ let undiscretize_coords board (x,y) =
   and multy = board.fydim / board.ydim
   and shifty = board.fydim / 2
   in
-    (((x * multx - shiftx), (y * multy - shifty)),
-     ((x * multx - shiftx), (y * multy - shifty + multy)),
-     ((x * multx - shiftx + multx), (y * multy - shifty + multy)),
-     ((x * multx - shiftx + multx), (y * multy - shifty)))
+    (((x * multx + shiftx), (y * multy + shifty)),
+     ((x * multx + shiftx), (y * multy + shifty + multy)),
+     ((x * multx + shiftx + multx), (y * multy + shifty + multy)),
+     ((x * multx + shiftx + multx), (y * multy + shifty)))
 
 let discretize_coords board (fx,fy) =
   (board.xdim * fx / board.fxdim + board.xdim / 2,
@@ -137,10 +106,10 @@ let register_boldercrater board bcr =
   and y = bcr.Telemetry.bcy
   and r = bcr.Telemetry.bcr
   in
-    if BCRecorder.mem (x,y) board.bcrecorder then (* prohibits doulbes *)
+    if BCRecorder.mem bcr board.bcrecorder then (* prohibits doulbes *)
       ()
     else (* skip circles that are already known *)
-      board.bcrecorder <- BCRecorder.add (x,y) board.bcrecorder;
+      board.bcrecorder <- BCRecorder.add bcr board.bcrecorder;
       let rsquare = r * r
       in let check_inside (cx, cy) =
 	  if (x - cx) * (x - cx) + (y - cy) * (y - cy) < rsquare then

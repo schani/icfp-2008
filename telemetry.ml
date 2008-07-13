@@ -36,13 +36,48 @@ type initialization = {
   imax_hard_turn:float;
 }
 
+type direction = Start | East | North | West | South
+type field_state = Free | Partially_Free | Occupied | Unknown
+    
+type field = {
+  mutable state: field_state;
+  mutable bouldercraters: bouldercrater list;
+  mutable enemy_penalty: int; (* pentalty of martians *)
+  mutable dijkstra_cost: int; (* stores tmp values for calculation *)
+  mutable dijkstra_round: int; (* stores in which round the field was
+				  calculated last *)
+  mutable dijkstra_prev: direction;
+  (* stores previous field to accelerate result *)
+}
+
+module BCRecorderEntry =
+  struct
+    type t = bouldercrater
+    let compare = Pervasives.compare
+  end
+
+module BCRecorder = Set.Make(BCRecorderEntry)
+
+type board = {
+  xdim: int;
+  ydim: int;
+  fxdim: int;
+  fydim: int;
+  minsens: int;
+  maxsens: int;
+  fields: (field array) array;
+  mutable bcrecorder: Set.Make(BCRecorderEntry).t;
+}
+
 type world = {
   world_init:initialization; 
   world_vehicle_state:vehicle_state;
   world_straight_max:float;
   world_min_speed:int;
   world_dst:int*int;
+  world_board:board;
 }
+
      
 
 let spaceregex = Str.regexp " " 
