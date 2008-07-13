@@ -18,8 +18,8 @@ let neg_dir = function
       Printf.fprintf stderr "discrete.neg_dir: error: called with start";
       Start
 
-let make_array_array x y z =
-  Array.init y (fun _ -> Array.make x z)
+let make_array_array x y f =
+  Array.init y (fun _ -> Array.init x f)
 
 (* API: use this to create a new board *)
 let create_board x y fx fy minsens maxsens =
@@ -30,14 +30,14 @@ let create_board x y fx fy minsens maxsens =
     fydim = fy;
     minsens = minsens;
     maxsens = maxsens;
-    fields = make_array_array x y {
-      state = Unknown;
-      bouldercraters = [];
-      enemy_penalty = 0;
-      dijkstra_cost = 0;
-      dijkstra_round = 0;
-      dijkstra_prev = South; (* means nothing *)
-    };
+    fields = make_array_array x y (fun _ -> {
+				     state = Unknown;
+				     bouldercraters = [];
+				     enemy_penalty = 0;
+				     dijkstra_cost = 0;
+				     dijkstra_round = 0;
+				     dijkstra_prev = South; (* means nothing *)
+				   });
     bcrecorder = BCRecorder.empty;
   }
 
