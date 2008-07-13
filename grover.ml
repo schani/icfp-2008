@@ -4,13 +4,24 @@ open Telemetry
 let drawing_xdim = ref 600
 let drawing_ydim = ref 600
 
+let drawlength_of_gamelength board (x,y) =
+  printf "@@@ coords (%i,%i) gamesize (%i,%i) -> drawing (%i, %i)\n"
+    x y board.fxdim board.fydim
+    (x* !drawing_xdim / board.fxdim)
+    (y* !drawing_ydim / board.fydim);
+  (x * !drawing_xdim / board.fxdim,
+   y * !drawing_ydim / board.fydim)
+
 let drawcoords_of_gamecoords board (x,y) =
-  let fxmul = !drawing_xdim / board.fxdim
-  and fymul = !drawing_ydim / board.fydim
-  and fxshift = board.fxdim / 2
+  let fxshift = board.fxdim / 2
   and fyshift = board.fydim / 2
   in
-    (x + fxshift) * fxmul, !drawing_ydim - (y + fyshift) * fymul
+    printf "@@@ coords (%i,%i) gamesize (%i,%i) -> drawing (%i, %i)\n"
+      x y board.fxdim board.fydim
+      ((x + fxshift) * !drawing_xdim / board.fxdim)
+      (!drawing_ydim - (y + fyshift) * !drawing_ydim / board.fydim);
+    ((x + fxshift) * !drawing_xdim / board.fxdim,
+     (!drawing_ydim - (y + fyshift) * !drawing_ydim / board.fydim))
 
 let create_main_window () =
   let win = GWindow.window ~width:600 ~height:600 ()
@@ -26,11 +37,15 @@ let create_main_window () =
 let redraw_world world (drawing: GDraw.drawable) =
   let draw_bc bcr =
     let dx, dy = drawcoords_of_gamecoords world.world_board (bcr.bcx, bcr.bcy)
-    and rx, ry = drawcoords_of_gamecoords world.world_board (bcr.bcr, bcr.bcr)
     in
-      drawing#set_foreground (`NAME (match bcr.bctype with
+    let rx, ry = drawlength_of_gamelength world.world_board (bcr.bcr, bcr.bcr)
+    in
+(*      drawing#set_foreground (`NAME (match bcr.bctype with
 					 Boulder -> "brown"
-				       | Crater -> "gray"));
+				       | Crater -> "gray"));*)
+      fprintf stderr
+	"plotting a boldercrater at x=%i, y=%i, width=%i, height=%i\n"
+	(dx - rx / 2) (dy - ry / 2) rx ry;
       drawing#arc ~filled:false ~x:(dx - rx / 2) ~y:(dy - ry / 2)
 	~width:rx ~height:ry ();
   in
