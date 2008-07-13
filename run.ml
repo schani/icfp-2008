@@ -187,7 +187,7 @@ let stupid_loop_one_game socket =
 let create_socket () =
   Communication.connect "localhost" 17676
 
-let main = 
+let main () = 
   try
     (* Communication.open_connection (Sys.argv.(0)) (int_of_string
        Sys.argv.(1)) *)
