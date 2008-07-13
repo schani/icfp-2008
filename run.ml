@@ -48,42 +48,44 @@ let obj_ahead_p t dst_angle objs=
   let ahead = find_all_blocking_objs t dst_angle objs in
   (List.length ahead) > 0
 
-let evade_objs w t turn objs = 
+let evade_obj w t turn badguy evadeto = 
   let mypos = (t.x,t.y) in
-  let ahead = find_all_blocking_objs t turn objs in 
-  let x = List.length ahead in
-  
-  Printf.fprintf stderr "Found %d bad craters!\n" x;
 
-  let distfromme o = Geometry.distanceSq mypos (o.bcx,o.bcy) in
-  let ahead = List.sort (fun a b -> (distfromme a)-(distfromme b) ) ahead in
-  
-  let badguy = List.hd ahead in
-  
   let badpos = (badguy.bcx,badguy.bcy) in
-
+  
   let badvec = Geometry.rel_pos mypos badpos in
-  
-  let normvec = 
-    if Geometry.angle_left_of t.dir (Geometry.angle_to_point mypos badpos) then
-      Geometry.norm_vec_left 
-    else
-      Geometry.norm_vec_right
+
+  let evadeto = match evadeto with 
+    | (`EvadeLeft | `EvadeRight) as x -> x
+    | `EvadeDunno ->     
+	if Geometry.angle_left_of t.dir (Geometry.angle_to_point mypos badpos) then
+	  `EvadeLeft
+	else
+	  `EvadeRight
   in
-  let norm = Geometry.scale_vec (normvec badvec) (badguy.bcr+2000) in
+
+  Printf.fprintf stderr "Evading to %s\n" (match evadeto with `EvadeLeft-> "Left" | `EvadeRight -> "Right");
+
+  let normvec = 
+    match evadeto with 
+      | `EvadeLeft -> Geometry.norm_vec_left badvec
+      | `EvadeRight -> Geometry.norm_vec_right badvec
+  in
+  let norm = Geometry.scale_vec normvec (badguy.bcr+2000) in
   let evade_dst = Geometry.abs_pos mypos (Geometry.abs_pos badvec norm) in
-  
 
-  print_vec stderr "mypos" mypos;
-  print_vec stderr "badvec" badvec;
-  print_vec stderr "norm" norm;
-  print_vec stderr "evadedst" evade_dst;
-  print_vec stderr "badpos" badpos;
-
-  Printf.fprintf stderr "rad=%d\n" badguy.bcr;
+(*   
+     print_vec stderr "mypos" mypos;
+     print_vec stderr "badvec" badvec;
+     print_vec stderr "norm" norm;
+     print_vec stderr "evadedst" evade_dst;
+     print_vec stderr "badpos" badpos;
+*)
   
   let evade_angle = Geometry.rel_angle_to_point t.dir mypos evade_dst in
-  Printf.fprintf stderr "evading to %f (%d craters ahead) \n" evade_angle x;
+  Printf.fprintf stderr "evading to %f (abs) %f (rel)" (t.dir +. evade_angle) evade_angle;
+  
+  Printf.fprintf stderr "\n";
   
   let speeding = 
     if t.speed*t.speed > 3*(Geometry.distanceSq mypos badpos) then 
@@ -94,23 +96,28 @@ let evade_objs w t turn objs =
       Accelerating
   in
   speeding,(dir_of_turn w evade_angle)
-   
- 
-let great_decision_procedure w t = 
-  let dst = w.world_dst in
-  let objs =  (List.append t.craters t.boulders) in
-  let turn = Geometry.rel_angle_to_point t.dir (t.x,t.y) dst in
-  flush stderr;
-  let want_dir = dir_of_turn w turn in
+
+
+
+let evade_objs w t turn ahead = 
+  let mypos = (t.x,t.y) in
+  let distfromme o = Geometry.distanceSq mypos (o.bcx,o.bcy) in
+  let ahead = List.sort (fun a b -> (distfromme a)-(distfromme b) ) ahead in
+  let badguy = List.hd ahead in
+  evade_obj w t turn badguy `EvadeDunno
   
-  if obj_ahead_p t turn objs then 
-    evade_objs w t turn objs
+
+
+let evade_if_necessary decision w t dir_to_dst = 
+  let visible_objs =  (List.append t.craters t.boulders) in
+  let ahead = find_all_blocking_objs t dir_to_dst visible_objs in 
+  let l = List.length ahead in
+  Printf.fprintf stderr "Found %d bad craters!\n" l;
+  if l > 0 then 
+    evade_objs w t dir_to_dst ahead
   else
-    Accelerating,want_dir
-
-      
-let precalculation_hook x = x
-
+    decision
+   
 let check_speed world t (wantspeed,wantturn) = 
   if t.speed < world.world_min_speed then
     Accelerating,wantturn
@@ -118,6 +125,20 @@ let check_speed world t (wantspeed,wantturn) =
     Breaking,wantturn
   else
     wantspeed,wantturn
+ 
+let small_decision_procedure w t = 
+  let dst = w.world_dst in
+  let dir_to_dst = Geometry.rel_angle_to_point t.dir (t.x,t.y) dst in
+  let turning = dir_of_turn w dir_to_dst in
+  
+  let decision = Accelerating,turning in
+  let decision = evade_if_necessary decision w t dir_to_dst in
+  let decision = check_speed w t decision in
+  decision
+
+      
+let precalculation_hook x = x
+
 
 let world_init socket =
   let _ = Communication.waitfordata socket in
@@ -135,6 +156,7 @@ let world_init socket =
     }
 
 let world_step world socket =
+  flush stderr;
   match Communication.sock_recv_next socket with 
     | Some(next) ->
 	if not (is_telemetry next) then 
@@ -152,9 +174,7 @@ let world_step world socket =
 	    let t = telemetry_of_string next in
 	      
 	    let world = merge_telemetry_into_world world t in
-	    let wantedstate = great_decision_procedure world t in
-	      
-	    let wantedstate = check_speed world t wantedstate in
+	    let wantedstate = small_decision_procedure world t in
 	      
 	    (* 
 	       Printf.fprintf stderr "\nWant: %s\n Have: %s\nReported: %s\n" 
