@@ -19,9 +19,13 @@ type board = {
   ydim: int;
   fxdim: int;
   fydim: int;
+  minsens: int;
+  maxsens: int;
   fields: (field array) array;
 }
 
+let pi = 3.1415926535897932384626433
+  
 let param_base_cost = 10
 let param_martian_core_penalty = 50
 let param_martian_penalty_radius = 3
@@ -40,12 +44,14 @@ let make_array_array x y z =
   Array.init y (fun _ -> Array.make x z)
 
 (* API: use this to create a new board *)
-let create_board x y fx fy =
+let create_board x y fx fy minsens maxsens =
   {
     xdim = x;
     ydim = y;
     fxdim = fx;
     fydim = fy;
+    minsens = minsens;
+    maxsens = maxsens;
     fields = make_array_array x y {
       state = Unknown;
       bouldercraters = [];
@@ -65,6 +71,19 @@ let incr_coords (x,y) = function
       Printf.fprintf stderr "discrete.neg_dir: error: called with start";
       x,y
 
+(* this returns 4 coords of the corners of the discrete field,
+   first south west then clockwise *)
+let undiscretize_coords board (x,y) =
+  let multx = board.fxdim / board.xdim
+  and shiftx = board.fxdim / 2
+  and multy = board.fydim / board.ydim
+  and shifty = board.fydim / 2
+  in
+    (((x * multx - shiftx), (y * multy - shifty)),
+     ((x * multx - shiftx), (y * multy - shifty + multy)),
+     ((x * multx - shiftx + multx), (y * multy - shifty + multy)),
+     ((x * multx - shiftx + multx), (y * multy - shifty)))
+
 let discretize_coords board (fx,fy) =
   (board.xdim * fx / board.fxdim + board.xdim / 2,
    board.ydim * fy / board.fydim + board.ydim /
@@ -79,14 +98,165 @@ let discretize_coords board (fx,fy) =
 
 2)
 
-    
+let discrete_inner_range board (fx1, fy1) (fx2, fy2) =
+  let x1,y1 = discretize_coords board (fx1, fy1)
+  and x2,y2 = discretize_coords board (fx2, fy2)
+  in let x1,y1 = x1 + 1, y1 + 1
+     and x2,y2 = x2 - 1, y2 - 1
+  in
+    if x1 > x2 || y1 > y2 then (* range might be non existant *)
+      None
+    else
+      Some ((x1,y1), (x2, y2))
 
+let discrete_outer_range board (fx1, fy1) (fx2, fy2) =
+  let x1,y1 = discretize_coords board (fx1, fy1)
+  and x2,y2 = discretize_coords board (fx2, fy2)
+  in
+    (x1,y1), (x2, y2)
+
+let circle_flag_as_occupied board (x1, y1) (x2, y2) =
+  for xi = x1 to x2 do
+    for yi = y1 to y2 do
+      board.fields.(yi).(xi).state <- Occupied;
+    done
+  done
+
+let circle_flag_as_free board (x1, y1) (x2, y2) =
+  for xi = x1 to x2 do
+    for yi = y1 to y2 do
+      if board.fields.(yi).(xi).state = Unknown then
+	board.fields.(yi).(xi).state <- Free;
+    done
+  done
+
+(* API: this can be used to register a geometric circle into the
+   discrete map.
+   It works by: first flagging all fields that are in are fully in an inner
+   rectangle.
+   Then it checks all rectangles that are partly in an outer rectangle. Those
+   in inner rectangles will be skipped anyway.
+*)
+let register_circle board (x,y) r =
+  let rsquare = r * r
+  in let check_inside (cx, cy) =
+      if (x - cx) * (x - cx) + (y - cy) * (y - cy) < rsquare then
+	1 (* inside *)
+      else
+	(-1) (* outside *)
+  in let check_for_occupied (x1, y1) (x2, y2) =
+      for xi = x1 to x2 do
+	for yi = y1 to y2 do
+	  let f = board.fields.(yi).(xi)
+	  in
+	    if f.state = Occupied || f.state = Free then
+	      () (* no need to double check *)
+	    else
+	      let (fx1,fy1), (fx2,fy2), (fx3,fy3), (fx4,fy4) =
+		undiscretize_coords board (xi,yi)
+	      and count_inside = ref 0
+	      in
+		count_inside := !count_inside + check_inside (fx1,fy1);
+		count_inside := !count_inside + check_inside (fx2,fy2);
+		count_inside := !count_inside + check_inside (fx3,fy3);
+		count_inside := !count_inside + check_inside (fx4,fy4);
+		match !count_inside with
+		    4 -> f.state <- Occupied (* fully inside *)
+		  | (-4) -> () (* outside but might not be free *)
+		  | _ -> f.state <- Partially_Free (* partly inside *)
+		
+	done
+      done
+  in let fr = float_of_int r; (* calculate inner square *)
+  in let fh = fr /. sqrt(2.0);
+  in let h = int_of_float fh
+  in
+    begin
+      match discrete_inner_range board (x - h, y - h) (x + h, y + h) with
+	  Some (c1, c2) -> circle_flag_as_occupied board c1 c2
+	| None -> () (* inner range might be empty *);
+    end;
+    let c1, c2 = discrete_outer_range board (x - r, y - r) (x + r, y + r)
+    in
+      check_for_occupied c1 c2
+
+
+(* API: this can be used to register the view ellipse, works like
+   register_circle but marks space as free not occupied.
+   Note:  all circles MUST be registered before
+
+   It first approximates a inner circle and then make hard work on remaining
+   fields in outer rectangle.
+*)
+let register_ellipse board (f1x, f1y) angle =
+  let p = board.minsens
+  and q = board.maxsens
+  in let a = (p + q) / 2
+     and e = (q - p) / 2
+  in let bsquare = a * a - e * e
+  in let fb = sqrt (float_of_int bsquare)
+     and cosangle = cos(angle *. pi /. 180.)
+     and sinangle = sin(angle *. pi /. 180.)
+  in let fmx = (float_of_int f1x) +. (float_of_int e) *. cosangle
+     and fmy = (float_of_int f1y) +. (float_of_int e) *. sinangle
+     and ff2x = (float_of_int f1x) +. 2. *. (float_of_int e) *. cosangle
+     and ff2y = (float_of_int f1y) +. 2. *. (float_of_int e) *. sinangle
+      (* now flag circle located at mx,my with radius b *)
+  in let mx = int_of_float fmx
+     and my = int_of_float fmy
+     and f2x = int_of_float ff2x
+     and f2y = int_of_float ff2y
+     and f2a = float_of_int (2 * a)
+  in let fh = fb *. sqrt(2.0)
+  in let check_inside (cx, cy) =
+      (* my theory: if sum of distance to F1 and F2 is more then 2a then
+	 point lies outside, else inside *)
+      let sqr1 = (f1x - cx) * (f1x - cx) + (f1y - cy) * (f1y - cy)
+      and sqr2 = (f2x - cx) * (f2x - cx) + (f2y - cy) * (f2y - cy)
+      in
+	if (sqrt (float_of_int sqr1)) +. (sqrt (float_of_int sqr2)) > f2a then
+	  (-1) (* outside *)
+	else
+	  1 (* inside *)
+  in let check_for_free (x1, y1) (x2, y2) =
+      for xi = x1 to x2 do
+	for yi = y1 to y2 do
+	  let f = board.fields.(yi).(xi)
+	  in
+	    if f.state = Occupied || f.state = Free then
+	      () (* no need to double check *)
+	    else
+	      let (fx1,fy1), (fx2,fy2), (fx3,fy3), (fx4,fy4) =
+		undiscretize_coords board (xi,yi)
+	      and count_inside = ref 0
+	      in
+		count_inside := !count_inside + check_inside (fx1,fy1);
+		count_inside := !count_inside + check_inside (fx2,fy2);
+		count_inside := !count_inside + check_inside (fx3,fy3);
+		count_inside := !count_inside + check_inside (fx4,fy4);
+		match !count_inside with
+		    4 -> f.state <- Occupied (* fully inside *)
+		  | (-4) -> () (* outside but might not be free *)
+		  | _ -> f.state <- Partially_Free (* partly inside *)
+		
+	done
+      done
+  in let h = int_of_float fh
+  in
+    begin
+      match discrete_inner_range board (mx - h, my - h) (mx + h, my + h) with
+	  Some (c1, c2) -> circle_flag_as_free board c1 c2
+	| None -> () (* inner range might be empty *);
+    end;
+    let c1, c2 = discrete_outer_range board (mx - a, my - a) (mx + a, my + a)
+    in
+      check_for_free c1 c2
 
 let martian_add b x y p =
   if x >= 0 && x < b.xdim && y >= 0 && y < b.ydim then
     b.fields.(y).(x).enemy_penalty <- b.fields.(y).(x).enemy_penalty + p
 
-let martian_quadcircle b x y r p =
+let martian_squarecircle b x y r p =
   for xi = x - r to x + r
   do
     martian_add b xi (y - r) p;
@@ -102,7 +272,7 @@ let rec martian_modify b x y p r =
   if r > param_martian_penalty_radius then
     ()
   else begin
-    martian_quadcircle b x y r p;
+    martian_squarecircle b x y r p;
     martian_modify b x y (p - param_martian_penalty_decrementer) (r + 1)
   end
 
