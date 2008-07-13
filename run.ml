@@ -176,6 +176,8 @@ let world_step world socket =
 	    let t = telemetry_of_string next in
 	      List.iter (Discrete.register_boldercrater world.world_board)
 		t.boulders;
+	      List.iter (Discrete.register_boldercrater world.world_board)
+		t.craters;
 	    let world = merge_telemetry_into_world world t in
 	    let wantedstate = small_decision_procedure world t in
 	      
