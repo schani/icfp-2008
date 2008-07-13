@@ -26,23 +26,32 @@ let create_main_window () =
     drawing#set_background `BLACK;
     win, area, drawing
 
+let draw_bc board (drawing: GDraw.drawable) bcr =
+  let dx, dy = drawcoords_of_gamecoords board (bcr.bcx, bcr.bcy)
+  and rx, ry = drawlength_of_gamelength board (bcr.bcr, bcr.bcr)
+  in
+    drawing#set_foreground (`NAME (match bcr.bctype with
+				       Boulder -> "gray"
+				     | Crater -> "brown"));
+    drawing#arc ~filled:false ~x:(dx - rx) ~y:(dy - ry)
+      ~width:(rx * 2) ~height:(ry * 2) ()
+
+let draw_homebase board (drawing: GDraw.drawable) =
+  let dx, dy = drawcoords_of_gamecoords board (0, 0)
+  and rx, ry = drawlength_of_gamelength board (2500, 2500)
+  in
+    drawing#set_foreground (`NAME "green");
+    drawing#arc ~filled:false ~x:(dx - rx) ~y:(dy - ry)
+      ~width:(rx * 2) ~height:(ry * 2) ()
+
 let redraw_world world (area: GMisc.drawing_area) (drawing: GDraw.drawable) _ =
   let x,y = drawing#size;
+  and board = !world.world_board
   in
     drawing_xdim := x;
     drawing_ydim := y;
-  let draw_bc bcr =
-    let dx, dy = drawcoords_of_gamecoords !world.world_board (bcr.bcx, bcr.bcy)
-    in
-    let rx, ry = drawlength_of_gamelength !world.world_board (bcr.bcr, bcr.bcr)
-    in
-      drawing#set_foreground (`NAME (match bcr.bctype with
-					 Boulder -> "gray"
-				       | Crater -> "brown"));
-      drawing#arc ~filled:false ~x:(dx - rx / 2) ~y:(dy - ry / 2)
-	~width:rx ~height:ry ();
-  in
-    BCRecorder.iter draw_bc !world.world_board.bcrecorder;
+    draw_homebase board drawing;
+    BCRecorder.iter (draw_bc board drawing) board.bcrecorder;
     false
 
 let server_msg_callback world socket =
