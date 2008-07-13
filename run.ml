@@ -118,71 +118,82 @@ let check_speed world t (wantspeed,wantturn) =
     Breaking,wantturn
   else
     wantspeed,wantturn
-    
 
-let stupid_loop_one_game socket = 
+let world_init socket =
   let _ = Communication.waitfordata socket in
   let init = match Communication.sock_recv_next socket with
     | Some(x) -> x
     | None -> failwith "zeugs"
   in
   let init = initialization_of_string init in
-  let world = {
-    world_init = init;
-    world_vehicle_state = Breaking,Straight;
-    world_straight_max = 0.1;
-    world_min_speed = (init.imax_sensor / 10); 
-    world_dst = 0,0;
-  }
+    {
+      world_init = init;
+      world_vehicle_state = Breaking,Straight;
+      world_straight_max = 0.1;
+      world_min_speed = (init.imax_sensor / 10); 
+      world_dst = 0,0;
+    }
+
+let world_step world socket =
+  match Communication.sock_recv_next socket with 
+    | Some(next) ->
+	if not (is_telemetry next) then 
+	  (Printf.fprintf stderr "Event: %s\n" next;flush stderr;
+	   match event_of_string next with
+	     | Scored x ->
+		 Printf.fprintf stderr "We have scored %d points!\n" x;
+		 flush stderr;
+		 world
+	     | BoulderHit | CraterFall | Killed | Success ->
+		 world
+	  )
+	else
+	  begin
+	    let t = telemetry_of_string next in
+	      
+	    let world = merge_telemetry_into_world world t in
+	    let wantedstate = great_decision_procedure world t in
+	      
+	    let wantedstate = check_speed world t wantedstate in
+	      
+	    (* 
+	       Printf.fprintf stderr "\nWant: %s\n Have: %s\nReported: %s\n" 
+	       (string_of_state wantedstate) 
+	       (string_of_state world.world_vehicle_state) 
+	       (string_of_state (t.speeding,t.turning));
+	    *)
+	      
+	    let command = Statemachines.both_change_to world.world_vehicle_state wantedstate in
+	    let world = {world with world_vehicle_state = (apply_command command world.world_vehicle_state)} in
+	      Communication.sock_send socket (command2string command);
+	      world
+	  end
+    | None ->
+	Printf.fprintf stderr "hoscherei\n";
+	world 
+
+let stupid_loop_one_game socket =
+  let world = world_init socket
   in
-  
   let rec loop world = 
     if not (Communication.is_dataavailable socket) then
       let world = precalculation_hook world in loop world
     else
       let _ = Communication.waitfordata socket in
-      let next = 
-	match Communication.sock_recv_next socket with 
-	  | Some(x) -> x
-	  | None -> (Printf.fprintf stderr "hoscherei\n"; loop world) 
-      in 
-      if not (is_telemetry next) then 
-	(Printf.fprintf stderr "Event: %s\n" next;flush stderr;
-	match event_of_string next with
-	  | Scored x -> Printf.fprintf stderr "We have scored %d points!\n" x;flush stderr; loop world
-	  | BoulderHit | CraterFall | Killed | Success -> loop world
-	)
-      else
-	begin
-	  let t = telemetry_of_string next in
-	  
-	  let world = merge_telemetry_into_world world t in
-	  let wantedstate = great_decision_procedure world t in
-	  
-	  let wantedstate = check_speed world t wantedstate in
-	  
-	  (* 
-	     Printf.fprintf stderr "\nWant: %s\n Have: %s\nReported: %s\n" 
-	     (string_of_state wantedstate) 
-	     (string_of_state world.world_vehicle_state) 
-	     (string_of_state (t.speeding,t.turning));
-	  *)
-	  
-	  let command = Statemachines.both_change_to world.world_vehicle_state wantedstate in
-	  let world = {world with world_vehicle_state = (apply_command command world.world_vehicle_state)} in
-	  Communication.sock_send socket (command2string command);
-	  loop world
-	end
+	loop (world_step world socket)
   in
-  loop world
-    
-    
+    loop world
+
+let create_socket () =
+  Communication.connect "localhost" 17676
+
 let main = 
   try
     (* Communication.open_connection (Sys.argv.(0)) (int_of_string
        Sys.argv.(1)) *)
-    let socket = Communication.connect "localhost" 17676 in
-    stupid_loop_one_game socket 
+    let socket = create_socket ()
+    in
+      stupid_loop_one_game socket 
   with Unix.Unix_error(code,_,_) as e -> Printf.fprintf stderr "%s\n" (Unix.error_message code);
     raise e
   
