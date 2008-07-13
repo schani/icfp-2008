@@ -14,6 +14,14 @@ type field = {
   (* stores previous field to accelerate result *)
 }
 
+module BCRecorderEntry =
+  struct
+    type t = int * int
+    let compare = Pervasives.compare
+  end
+
+module BCRecorder = Set.Make(BCRecorderEntry)
+
 type board = {
   xdim: int;
   ydim: int;
@@ -22,6 +30,7 @@ type board = {
   minsens: int;
   maxsens: int;
   fields: (field array) array;
+  mutable bcrecorder: Set.Make(BCRecorderEntry).t;
 }
 
 let pi = 3.1415926535897932384626433
@@ -59,7 +68,8 @@ let create_board x y fx fy minsens maxsens =
       dijkstra_cost = 0;
       dijkstra_round = 0;
       dijkstra_prev = South; (* means nothing *)
-    }
+    };
+    bcrecorder = BCRecorder.empty;
   }
 
 let incr_coords (x,y) = function
@@ -115,21 +125,6 @@ let discrete_outer_range board (fx1, fy1) (fx2, fy2) =
   in
     (x1,y1), (x2, y2)
 
-let circle_flag_as_occupied board (x1, y1) (x2, y2) =
-  for xi = x1 to x2 do
-    for yi = y1 to y2 do
-      board.fields.(yi).(xi).state <- Occupied;
-    done
-  done
-
-let circle_flag_as_free board (x1, y1) (x2, y2) =
-  for xi = x1 to x2 do
-    for yi = y1 to y2 do
-      if board.fields.(yi).(xi).state = Unknown then
-	board.fields.(yi).(xi).state <- Free;
-    done
-  done
-
 (* API: this can be used to register a geometric circle into the
    discrete map.
    It works by: first flagging all fields that are in are fully in an inner
@@ -137,52 +132,72 @@ let circle_flag_as_free board (x1, y1) (x2, y2) =
    Then it checks all rectangles that are partly in an outer rectangle. Those
    in inner rectangles will be skipped anyway.
 *)
-let register_circle board (x,y) r =
-  let rsquare = r * r
-  in let check_inside (cx, cy) =
-      if (x - cx) * (x - cx) + (y - cy) * (y - cy) < rsquare then
-	1 (* inside *)
-      else
-	(-1) (* outside *)
-  in let check_for_occupied (x1, y1) (x2, y2) =
-      for xi = x1 to x2 do
-	for yi = y1 to y2 do
-	  let f = board.fields.(yi).(xi)
-	  in
-	    if f.state = Occupied || f.state = Free then
-	      () (* no need to double check *)
-	    else
-	      let (fx1,fy1), (fx2,fy2), (fx3,fy3), (fx4,fy4) =
-		undiscretize_coords board (xi,yi)
-	      and count_inside = ref 0
-	      in
-		count_inside := !count_inside + check_inside (fx1,fy1);
-		count_inside := !count_inside + check_inside (fx2,fy2);
-		count_inside := !count_inside + check_inside (fx3,fy3);
-		count_inside := !count_inside + check_inside (fx4,fy4);
-		match !count_inside with
-		    4 -> f.state <- Occupied (* fully inside *)
-		  | (-4) -> () (* outside but might not be free *)
-		  | _ -> f.state <- Partially_Free (* partly inside *)
-		
-	done
-      done
-  in let fr = float_of_int r; (* calculate inner square *)
-  in let fh = fr /. sqrt(2.0);
-  in let h = int_of_float fh
+let register_boldercrater board bcr =
+  let x = bcr.Telemetry.bcx
+  and y = bcr.Telemetry.bcy
+  and r = bcr.Telemetry.bcr
   in
-    begin
-      match discrete_inner_range board (x - h, y - h) (x + h, y + h) with
-	  Some (c1, c2) -> circle_flag_as_occupied board c1 c2
-	| None -> () (* inner range might be empty *);
-    end;
-    let c1, c2 = discrete_outer_range board (x - r, y - r) (x + r, y + r)
-    in
-      check_for_occupied c1 c2
-
+    if BCRecorder.mem (x,y) board.bcrecorder then (* prohibits doulbes *)
+      ()
+    else (* skip circles that are already known *)
+      board.bcrecorder <- BCRecorder.add (x,y) board.bcrecorder;
+      let rsquare = r * r
+      in let check_inside (cx, cy) =
+	  if (x - cx) * (x - cx) + (y - cy) * (y - cy) < rsquare then
+	    1 (* inside *)
+	  else
+	    (-1) (* outside *)
+      in let flag_as_occupied board (x1, y1) (x2, y2) bcr =
+	  for xi = x1 to x2 do
+	    for yi = y1 to y2 do
+	      let f = board.fields.(yi).(xi)
+	      in
+		f.state <- Occupied;
+		f.bouldercraters <- bcr :: f.bouldercraters;
+	    done
+	  done
+      in let check_for_occupied (x1, y1) (x2, y2) =
+	  for xi = x1 to x2 do
+	    for yi = y1 to y2 do
+	      let f = board.fields.(yi).(xi)
+	      in
+		if List.mem bcr f.bouldercraters then
+		  () (* no need to double check *)
+		else
+		  let (fx1,fy1), (fx2,fy2), (fx3,fy3), (fx4,fy4) =
+		    undiscretize_coords board (xi,yi)
+		  and count_inside = ref 0
+		  in
+		    count_inside := !count_inside + check_inside (fx1,fy1);
+		    count_inside := !count_inside + check_inside (fx2,fy2);
+		    count_inside := !count_inside + check_inside (fx3,fy3);
+		    count_inside := !count_inside + check_inside (fx4,fy4);
+		    match !count_inside with
+			4 -> (* fully inside *)
+			  f.state <- Occupied; 
+			  f.bouldercraters <- bcr :: f.bouldercraters
+		      | (-4) -> () (* outside *)
+		      | _ -> (* partly inside *)
+			  if (f.state != Occupied) then
+			    f.state <- Partially_Free;
+			  f.bouldercraters <- bcr :: f.bouldercraters
+	     done
+	  done
+      in let fr = float_of_int r; (* calculate inner square *)
+      in let fh = fr /. sqrt(2.0);
+      in let h = int_of_float fh
+      in
+	begin
+	  match discrete_inner_range board (x - h, y - h) (x + h, y + h) with
+	      Some (c1, c2) -> flag_as_occupied board c1 c2 bcr
+	    | None -> () (* inner range might be empty *);
+	end;
+	let c1, c2 = discrete_outer_range board (x - r, y - r) (x + r, y + r)
+	in
+	  check_for_occupied c1 c2
 
 (* API: this can be used to register the view ellipse, works like
-   register_circle but marks space as free not occupied.
+   register_boldercrater but marks space as free not occupied.
    Note:  all circles MUST be registered before
 
    It first approximates a inner circle and then make hard work on remaining
@@ -208,6 +223,13 @@ let register_ellipse board (f1x, f1y) angle =
      and f2y = int_of_float ff2y
      and f2a = float_of_int (2 * a)
   in let fh = fb *. sqrt(2.0)
+  in let flag_as_free board (x1, y1) (x2, y2) =
+      for xi = x1 to x2 do
+	for yi = y1 to y2 do
+	  if board.fields.(yi).(xi).state = Unknown then
+	    board.fields.(yi).(xi).state <- Free;
+	done
+      done
   in let check_inside (cx, cy) =
       (* my theory: if sum of distance to F1 and F2 is more then 2a then
 	 point lies outside, else inside *)
@@ -238,14 +260,13 @@ let register_ellipse board (f1x, f1y) angle =
 		    4 -> f.state <- Occupied (* fully inside *)
 		  | (-4) -> () (* outside but might not be free *)
 		  | _ -> f.state <- Partially_Free (* partly inside *)
-		
 	done
       done
   in let h = int_of_float fh
   in
     begin
       match discrete_inner_range board (mx - h, my - h) (mx + h, my + h) with
-	  Some (c1, c2) -> circle_flag_as_free board c1 c2
+	  Some (c1, c2) -> flag_as_free board c1 c2
 	| None -> () (* inner range might be empty *);
     end;
     let c1, c2 = discrete_outer_range board (mx - a, my - a) (mx + a, my + a)

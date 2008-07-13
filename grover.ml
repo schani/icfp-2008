@@ -1,7 +1,10 @@
 open Printf
 
 let create_main_window () =
-  GWindow.window ~width:300 ~height:200 ()
+  let w = GWindow.window ~width:600 ~height:600 ()
+(*  in let area = GMisc.drawing_area ~width:100 ~height:100 ~packing:evbox#add () *)
+  in
+    w
 
 let server_msg_callback world socket =
   Run.world_step world socket
