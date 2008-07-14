@@ -168,7 +168,6 @@ let evade_if_necessary w t dir_to_dst request_slowdown =
     let visible_objs =  (List.append t.craters t.boulders) in
     let ahead = find_all_blocking_objs w t direction visible_objs in 
     let l = List.length ahead in
-    Printf.fprintf stderr "Found %d bad craters!\n" l; 
     if l > 0 && depth < 10 then 
       let new_dir,evadeto,request_slowdown = evade_objs w t direction ahead evadeto request_slowdown in
       if false (*  Geometry.angle_diff new_dir t.dir > w.world_init.imax_hard_turn *) then
@@ -260,14 +259,50 @@ let calc_speed world t turn request_slowdown =
       | `Faster -> Accelerating
       | `Slower -> Breaking
       | `Dontcare -> Rolling
-	    
- 
+	 
+let take l list =
+  let rec loop l acc = function
+  | [] -> acc 
+  | x::xs -> if l == 0 then acc else loop (l - 1) (x::acc) xs
+  in 
+  List.rev (loop l [] list)
+
+
+let howfar = 5
+
+let get_dst_from_deikstra world t = 
+  let mypos = t.x,t.y in
+  let no_place_like = 0,0 in
+  let b = world.world_board in
+  let list = Discrete.dijkstra_find_path b mypos no_place_like in
+  let world = {world with world_dijstra_path = list} in
+  match list with
+    | [] -> (Printf.fprintf stderr "failed kobayashi_maru test\n"; world,kobayashi_maru_dst)
+    | x::_ -> 
+	let lst = take howfar list in
+	let dst = Geometry.avg_coords (List.length lst) lst in
+	if Geometry.distanceSq dst no_place_like < world.world_field_size_squared then
+	  world,no_place_like
+	else
+	  world,dst
+
 let small_decision_procedure w t = 
+  let mydir = t.x,t.y in
+  let togo = Geometry.distanceSq mydir w.world_dst in
+  let w,new_dest = 
+    if (t.timestamp = 0) || (togo < w.world_field_size_squared*(howfar/2)) then
+      get_dst_from_deikstra w t 
+    else
+      w,w.world_dst
+  in
+  let w = {w with world_dst = new_dest} in
   let dst = w.world_dst in
   let dir_to_dst = Geometry.rel_angle_to_point t.dir (t.x,t.y) dst in
-  let turn,request_slowdown = evade_if_necessary w t dir_to_dst false in
-  let speed = calc_speed w t turn request_slowdown in
+  (* let turn,request_slowdown = evade_if_necessary w t dir_to_dst false in
+  let speed = calc_speed w t turn request_slowdown in *)
+  let speed,turn = Accelerating,dir_to_dst in
   let w = {w with world_aiming_at=(t.dir +. turn)} in
+  Printf.fprintf stderr "turn = %f dir_to_dst %f\n" turn dir_to_dst;
   w,(speed,(dir_of_turn w turn))
 
       
@@ -297,29 +332,6 @@ let world_init socket =
       world_field_size_squared = (init.idx / boardsize_x)*(init.idx / boardsize_x) +
 	(init.idy / boardsize_y)*(init.idy / boardsize_y);
     }
-
-let take l list =
-  let rec loop l acc = function
-  | [] -> acc 
-  | x::xs -> if l == 0 then acc else loop (l - 1) (x::acc) xs
-  in 
-  List.rev (loop l [] list)
-
-let get_dst_from_deikstra world t = 
-  let mypos = t.x,t.y in
-  let no_place_like = 0,0 in
-  let b = world.world_board in
-  let list = Discrete.dijkstra_find_path b mypos no_place_like in
-  let world = {world with world_dijstra_path = list} in
-  match list with
-    | [] -> (Printf.fprintf stderr "failed kobayashi_maru test\n"; world,kobayashi_maru_dst)
-    | x::_ -> 
-	let many = 2 in
-	let dst = Geometry.avg_coords many (take many list) in
-	if Geometry.distanceSq dst no_place_like < world.world_field_size_squared then
-	  world,no_place_like
-	else
-	  world,dst
 	
 let world_step world socket =
   flush stderr;
@@ -347,9 +359,9 @@ let world_step world socket =
 	    (* we know now that everything else must be free space *)
 	    Discrete.register_ellipse world.world_board (t.x, t.y) t.dir;
 	    let world = merge_telemetry_into_world world t in
-	    let world,new_dest = get_dst_from_deikstra world t in
-	    let world = {world with world_dst = new_dest} in
 	    let world,wantedstate = small_decision_procedure world t in
+	    
+	    Printf.fprintf stderr "---> %s\n" (string_of_state wantedstate);
 	    
 	    let rec sending_loop world = 
 	      let command = Statemachines.both_change_to world.world_vehicle_state wantedstate in

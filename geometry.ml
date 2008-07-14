@@ -1,8 +1,6 @@
 
 let pi = 3.1415926535897932384626433
 
-
-
 let angle_to_point (xpos,ypos) (xdst,ydst) = 
   let y = float_of_int (ydst-ypos) in
   let x = float_of_int (xdst-xpos) in
@@ -12,24 +10,29 @@ let angle_to_point (xpos,ypos) (xdst,ydst) =
   else
     phi
 
+let normalize angle = 
+  if angle > 180. then angle -. 360. else 
+    if angle < -180. then  angle +. 360. else
+      angle
+
 let turn_towards_dstangle soll haben = 
-  let haben = if haben < 0. then 360. +. haben else haben in
-  let soll = if soll < 0. then 360. +. soll else soll in
-  let rel_angle = soll -. haben in
-  let rv = 
+  let rel_angle = (normalize soll) -. (normalize haben) in
+  let rv =
     if rel_angle > 180. then
-      -. (rel_angle -. 180.)
+      rel_angle -. 360.
+    else if rel_angle < (-180.) then
+      rel_angle +. 360. 
     else
       rel_angle
   in
-  (* Printf.fprintf stderr "soll %f haben %f -> %f \n" soll haben rv; *)
   rv
+
 
 let rel_angle_to_point myangle mypos dst = 
   let angle = angle_to_point mypos dst in
   let turn = turn_towards_dstangle angle myangle  in
   turn
-
+    
 (* phi points to the left of psi, i.e. looking along psi, phi is to the left *)
 let angle_left_of phi psi = 
   let phi = if phi < 0. then phi +. 360. else phi in
