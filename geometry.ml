@@ -53,8 +53,7 @@ let distanceSq (x1,y1) (x2,y2) =
   let y = y1-y2 in 
   x*x + y*y
 
-(* not exact value! *)
-let distanceSqFromCircle xy1 xy2 r2 = 
+let inexactDistanceSqFromCircle xy1 xy2 r2 = 
   let d = distanceSq xy1 xy2 in
   d - r2*r2
 

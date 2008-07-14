@@ -55,8 +55,25 @@ let speed2string = function
 
 let command2string = function speed,turn -> 
   let x = (speed2string speed)^(turn2string turn)^";" in
-  (Printf.fprintf stderr "%s\n" x);
-  x
+  if (String.compare ";" x) = 0 then
+    x 
+  else
+    ((Printf.fprintf stderr "%s\n" x); x)
+
+let string_of_state (s,t) = 
+  (
+    match s with 
+      | Breaking -> "B"
+      | Rolling -> "-"
+      | Accelerating -> "A"
+  )^(
+    match t with 
+      | HardRight -> "R"
+      | Right -> "r"
+      | Straight -> "-"
+      | Left -> "l"
+      | HardLeft -> "L"
+  )
 
 let apply_command (speedcmd,turncmd) (speeding,turning) = 
   let newspeeding = 

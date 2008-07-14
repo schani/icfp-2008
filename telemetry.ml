@@ -69,15 +69,25 @@ type board = {
   mutable bcrecorder: Set.Make(BCRecorderEntry).t;
 }
 
+type step = Telemetry | Event | Init
+
+type acceleration_tracker = {
+  at_last_dir:float;
+  at_last_change:float;
+  at_max_angular_accel:float;
+}
+
 type world = {
   world_init:initialization; 
   world_vehicle_state:vehicle_state;
   world_straight_max:float;
   world_min_speed:int;
   world_dst:int*int;
+  world_really_close:int;
   world_board:board;
+  world_acceleration_tracker:acceleration_tracker;
+  world_last_step:step;
 }
-
      
 
 let spaceregex = Str.regexp " " 
@@ -172,28 +182,52 @@ let event_of_string str =
 let is_telemetry str = 
   (str.[0] == 'T')
 
+let init_accel_tracker = 
+  {
+    at_last_dir = 0.;
+    at_last_change = 0.;
+    at_max_angular_accel = 0.;
+  }
+    
+let acceltracker_skip at t = 
+  {at with 
+    at_last_dir = t.dir;
+  }
+
+let acceltracker_step at t = 
+  let dir_change = 10. *. abs_float (at.at_last_dir -. t.dir) in
+  let change_change = abs_float (at.at_last_change -. dir_change) in
+(* Printf.fprintf stderr "change= %f was %f newmax: %f last_change %f %B\n" dir_change at.at_last_change change_change at.at_last_change (at.at_last_change > 0.0001); *)
+  if (change_change > at.at_max_angular_accel) && (at.at_last_change > 0.0001) then
+    {
+      at_last_dir = t.dir;
+      at_last_change = dir_change;
+      at_max_angular_accel = change_change;
+    }
+  else
+    {at with at_last_dir = t.dir; at_last_change = dir_change}
+
+let merge_nontelemetry_into_world w e = 
+  let w = {w with world_last_step = Event} in
+  w
 
 let merge_telemetry_into_world w t = 
-  if t.timestamp = 0 then
-    {w with world_vehicle_state = (t.speeding,t.turning)}
-  else
-    w
+  let w = 
+    if t.timestamp = 0 then
+      {w with 
+	world_vehicle_state = (t.speeding,t.turning);
+      }
+    else 
+      w
+  in
+  let w = 
+    if w.world_last_step = Event then 
+      {w with world_acceleration_tracker = acceltracker_skip w.world_acceleration_tracker t}
+    else
+      {w with world_acceleration_tracker = acceltracker_step w.world_acceleration_tracker t}
+  in
+  {w with world_last_step = Telemetry}
   
-let string_of_state (s,t) = 
-  (
-    match s with 
-      | Breaking -> "B"
-      | Rolling -> "-"
-      | Accelerating -> "A"
-  )^(
-    match t with 
-      | HardRight -> "R"
-      | Right -> "r"
-      | Straight -> "-"
-      | Left -> "l"
-      | HardLeft -> "L"
-  )
-
 let initialization_of_string str =
   match (Str.split spaceregex str) with
     | "I"::dx::dy::t_lim::mins::maxs::maxv::maxt::maxht::[] -> begin
