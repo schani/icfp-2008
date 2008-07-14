@@ -49,6 +49,7 @@ let draw_bot board (drawing: GDraw.drawable) x y angle angle2 dst =
   let f_dx, f_dy = drawcoords_of_gamecoords board (x, y)
   and dst_x, dst_y = drawcoords_of_gamecoords board (dst)
   and bot_r = 20.0
+  and dst_r =  5.0
   and line_len = 150.0
   in let line1x = f_dx +. (cos (angle *. pi /. 180.)) *. line_len
      and line1y = f_dy -. (sin (angle *. pi /. 180.)) *. line_len
@@ -61,8 +62,11 @@ let draw_bot board (drawing: GDraw.drawable) x y angle angle2 dst =
     drawing#line (rnd f_dx) (rnd f_dy) (rnd line1x) (rnd line1y);
     drawing#set_foreground (`NAME "red");
     drawing#line (rnd f_dx) (rnd f_dy) (rnd dst_x) (rnd dst_y);
+    drawing#arc ~filled:false ~x:(rnd (dst_x -. dst_r)) ~y:(rnd (dst_y -. dst_r))
+      ~width:(rnd (dst_r *. 2.)) ~height:(rnd (dst_r *. 2.)) ();
     drawing#set_foreground (`NAME "lightblue");
     drawing#line (rnd f_dx) (rnd f_dy) (rnd line2x) (rnd line2y)
+      
       
 
 let draw_background board (drawing: GDraw.drawable) =
