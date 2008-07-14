@@ -386,62 +386,65 @@ let queue_is_empty q =
 let diid = ref 0
 
 (* API: use this to find a way to a destination *)
-let rec dijkstra_find_path board origin dest =
+let rec real_dijkstra_find_path board (ox, oy) (dx, dy) =
   let best_unknown = ref None
   and queue = ref PriSet.empty
-  in let f_ox,f_oy = discretize_coords board origin
-     and f_dx,f_dy = discretize_coords board dest
-  in let ox,oy = rnd f_ox, rnd f_oy
-     and dx,dy = rnd f_dx, rnd f_dy
-     and check_neighbours f x y =
-      let relax s d dx dy dir =
-	if d.state = Unknown || d.state = Occupied then begin
-	  (* store best unknown field *)
-	  if d.state = Unknown then begin
-	    match !best_unknown with
-		None ->
-		  best_unknown := Some ((dx, dy), s.dijkstra_cost)
-	      | Some (_, oldcost) -> 
-		  if oldcost >= s.dijkstra_cost then
-		    best_unknown := Some ((dx, dy), s.dijkstra_cost)
-	  end
-	end else
-	  let negdir = neg_dir dir
-	    (* calculate cost bonuses and maluses in here *)
-	  in let n = param_base_cost +
-	      (match d.state with
-		   Partially_Free -> 30
-		 | _ -> 0) +
-	      d.enemy_penalty +
-	      (match s.dijkstra_prev with
-		   x when x = negdir -> (-2) (* keeping diretion -> bonus *)
-		 | x when x = dir -> 2 (* u-turn -> malus *)
-		 | _ -> 0)
-	  in
-	    if d.dijkstra_round < !diid then begin
-	      d.dijkstra_round <- !diid;
-	      d.dijkstra_cost <- s.dijkstra_cost + n;
-	      d.dijkstra_prev <- negdir;
-	      queue_insert queue (d.dijkstra_cost, (d, dx, dy));
-	    end else (* already visited, check if new way is better *)
-	      if (s.dijkstra_cost + n) < d.dijkstra_cost then begin
-		(* we found a better way! *)
-		queue_remove queue (d.dijkstra_cost, (d, dx, dy));
+  in
+    printf "real_dijkstra: computing %i,%i to %i,%i..\n" ox oy dx dy;
+    let check_neighbours f x y =
+      let relax s d rdx rdy dir =
+	if dx = rdx && dy = rdy then
+	  (* found goal, make sure it is on top of queue *)
+	  queue_insert queue (0, (d, rdx, rdy))
+	else begin
+	  if d.state = Unknown || d.state = Occupied then begin
+	    (* store best unknown field *)
+	    if d.state = Unknown then begin
+	      match !best_unknown with
+		  None ->
+		  best_unknown := Some ((rdx, rdy), s.dijkstra_cost)
+		| Some (_, oldcost) -> 
+		    if oldcost >= s.dijkstra_cost then
+		      best_unknown := Some ((rdx, rdy), s.dijkstra_cost)
+	    end
+	  end else
+	    let negdir = neg_dir dir
+	      (* calculate cost bonuses and maluses in here *)
+	    in let n = param_base_cost +
+		(match d.state with
+		     Partially_Free -> 30
+		   | _ -> 0) +
+		d.enemy_penalty +
+		(match s.dijkstra_prev with
+		     x when x = negdir -> (-2) (* keeping diretion -> bonus *)
+		   | x when x = dir -> 2 (* u-turn -> malus *)
+		   | _ -> 0)
+	    in
+	      if d.dijkstra_round < !diid then begin
+		d.dijkstra_round <- !diid;
 		d.dijkstra_cost <- s.dijkstra_cost + n;
 		d.dijkstra_prev <- negdir;
-		queue_insert queue (d.dijkstra_cost, (d, dx, dy));
-	      end
+		queue_insert queue (d.dijkstra_cost, (d, rdx, rdy));
+	      end else (* already visited, check if new way is better *)
+		if (s.dijkstra_cost + n) < d.dijkstra_cost then begin
+		  (* we found a better way! *)
+		  queue_remove queue (d.dijkstra_cost, (d, rdx, rdy));
+		  d.dijkstra_cost <- s.dijkstra_cost + n;
+		  d.dijkstra_prev <- negdir;
+		  queue_insert queue (d.dijkstra_cost, (d, rdx, rdy));
+		end
+	end
       in
 	if x < (board.xdim - 1) then
-	  relax f board.fields.(y).(x+1) (x+1) y East;
+	    relax f board.fields.(y).(x+1) (x+1) y East;
 	if y < (board.ydim - 1) then
 	  relax f board.fields.(y+1).(x) x (y+1) North;
 	if x > 0 then
 	  relax f board.fields.(y).(x-1) (x-1) y West;
 	if y > 0 then
 	  relax f board.fields.(y-1).(x) x (y-1) South;
-  in let start_field = board.fields.(oy).(ox)
-  in
+    in let start_field = board.fields.(oy).(ox)
+    in
     incr diid;
     start_field.dijkstra_cost <- 0;
     start_field.dijkstra_round <- !diid;
@@ -451,21 +454,24 @@ let rec dijkstra_find_path board origin dest =
       if queue_is_empty queue then begin (* did not found homebase *)
 	match !best_unknown with
 	    None -> []
-	  | Some (a, _) ->
-	      dijkstra_find_path board origin (compute_undisc_middle board a)
+	  | Some ((ax, ay), _) ->
+	      printf "goal not found, now seeking new field: %i,%i\n" ax ay;
+	      real_dijkstra_find_path board (ox, oy) (ax, ay)
       end else begin
 	let _, (f,x,y) = queue_fetch_cheapest queue
 	in
+	  printf " q[%i,%i ? %i,%i] " x y dx dy;
 	  if x = dx && y = dy then (* found goal *)
 	    let rec tracegoal (x, y) result =
 	      let prev = board.fields.(y).(x).dijkstra_prev
 	      in
+		printf "in tracegoal\n";
 		if prev == Start then
 		  result
 		else
-		  tracegoal (incr_coords (x,y) prev)
-		    (compute_undisc_middle board (x, y) :: result)
+		  tracegoal (incr_coords (x,y) prev) ((x, y) :: result)
 	    in
+	      printf "callin tracegoal\n";
 	      tracegoal (x, y) []
 	  else begin
 	    check_neighbours f x y;
@@ -474,3 +480,22 @@ let rec dijkstra_find_path board origin dest =
       end
     in
       loop ()
+
+(* API: use this to find a way to a destination *)
+let dijkstra_find_path board origin dest =
+  let f_ox,f_oy = discretize_coords board origin
+  and f_dx,f_dy = discretize_coords board dest
+  in let ox,oy = rnd f_ox, rnd f_oy
+     and dx,dy = rnd f_dx, rnd f_dy
+  in
+    printf "dijkstra: starting to compute from %i,%i to %i,%i\n" ox oy dx dy;
+    let result = real_dijkstra_find_path board (ox, oy) (dx, dy)
+    in let result = List.map (compute_undisc_middle board) result
+    in let rec lpr = function
+	  [] -> ()
+      | (x,y) :: r -> printf " (%i,%i)"; lpr r
+    in
+      printf "dijkstra result="; flush stdout;
+      lpr result;
+      printf ".\n";
+      result
