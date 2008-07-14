@@ -28,7 +28,7 @@ let make_array_array x y f =
 
 (* API: use this to create a new board *)
 let create_board x y fx fy minsens maxsens =
-  {
+  let b = {
     xdim = x;
     f_xdim = float_of_int x;
     ydim = y;
@@ -47,10 +47,26 @@ let create_board x y fx fy minsens maxsens =
 				     enemy_penalty = 0;
 				     dijkstra_cost = 0;
 				     dijkstra_round = 0;
+				     dijkstra_homebase_cost = 0;
 				     dijkstra_prev = South; (* means nothing *)
 				   });
     bcrecorder = BCRecorder.empty;
   }
+  in
+    for yi = 0 to y - 1
+    do
+      printf "%i ->" yi;
+      for xi = 0 to x - 1
+      do
+	let hbc = (xi - x / 2) * (xi - x / 2) + (yi - y / 2) * (yi - y / 2)
+	in let hbc = iof (sqrt (foi hbc)) * 10
+	in
+	  b.fields.(yi).(xi).dijkstra_homebase_cost <- hbc;
+	  printf "%i " hbc;
+      done;
+      printf "\n"; flush stdout;
+    done;
+    b
 
 let incr_coords (x,y) = function
     East -> (x + 1, y)
@@ -76,7 +92,7 @@ let undiscretize_coords board (x,y) =
       ((foi y) *. f_multy -. f_shifty +. f_multy)), (* y3 *)
      (((foi x) *. f_multx -. f_shiftx +. f_multx), (* x4 *)
       ((foi y) *. f_multy -. f_shifty))) (* y4 *)
-
+(*
 let compute_undisc_middle board (x,y) =
   let f_multx = board.f_rxdim /. board.f_xdim
   and f_shiftx = board.f_rxdim /. 2.
@@ -85,6 +101,14 @@ let compute_undisc_middle board (x,y) =
   in
     (rnd ((foi x) *. f_multx -. f_shiftx +. f_multx /. 2.),
      rnd ((foi y) *. f_multy -. f_shifty +. f_multy /. 2.))
+*)
+
+let compute_undisc_middle board (x,y) =
+  let (fx1,fy1), (fx2,fy2), (fx3,fy3), (fx4,fy4) =
+    undiscretize_coords board (x,y)
+  in
+    (iof (fx1 +. (fx3 -. fx1) /. 2.),
+     iof (fy1 +. (fy3 -. fy1) /. 2.))
 
 let discretize_coords board (fx,fy) =
   (board.f_xdim *. (foi fx) /. board.f_rxdim +. board.f_xdim /. 2.,
@@ -404,23 +428,24 @@ let rec real_dijkstra_find_path board (ox, oy) (dx, dy) =
 	    if d.state = Unknown then begin
 	      match !best_unknown with
 		  None ->
-		  best_unknown := Some ((rdx, rdy), s.dijkstra_cost)
+		  best_unknown := Some ((rdx, rdy), d.dijkstra_homebase_cost)
 		| Some (_, oldcost) -> 
 		    if oldcost >= s.dijkstra_cost then
-		      best_unknown := Some ((rdx, rdy), s.dijkstra_cost)
+		      best_unknown := Some ((rdx, rdy), d.dijkstra_homebase_cost)
 	    end
 	  end else
 	    let negdir = neg_dir dir
 	      (* calculate cost bonuses and maluses in here *)
 	    in let n = param_base_cost +
 		(match d.state with
-		     Partially_Free -> 30
+		     Partially_Free -> 300
 		   | _ -> 0) +
-		d.enemy_penalty +
+		d.dijkstra_homebase_cost * 10 +
+		d.enemy_penalty (* +
 		(match s.dijkstra_prev with
 		     x when x = negdir -> (-2) (* keeping diretion -> bonus *)
 		   | x when x = dir -> 2 (* u-turn -> malus *)
-		   | _ -> 0)
+		   | _ -> 0) *)
 	    in
 	      if d.dijkstra_round < !diid then begin
 		d.dijkstra_round <- !diid;

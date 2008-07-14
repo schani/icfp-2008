@@ -46,6 +46,7 @@ type field = {
   mutable dijkstra_cost: int; (* stores tmp values for calculation *)
   mutable dijkstra_round: int; (* stores in which round the field was
 				  calculated last *)
+  mutable dijkstra_homebase_cost: int; (* how much away from homebase *)
   mutable dijkstra_prev: direction;
   (* stores previous field to accelerate result *)
 }
