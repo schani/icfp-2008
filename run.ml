@@ -1,7 +1,7 @@
 open Statemachines
 open Telemetry
 
-let roversize = 510 (* you want to supersize this? *)
+let roversize = 1000 (* you want to supersize this? *)
 let very_close = (250 + 100)
 
 let dir_of_turn w turn = 
