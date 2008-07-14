@@ -47,7 +47,7 @@ let create_board x y fx fy minsens maxsens =
 				     enemy_penalty = 0;
 				     dijkstra_cost = 0;
 				     dijkstra_round = 0;
-				     dijkstra_prev = South; (* means nothing *)
+				     dijkstra_prev = Start; (* means nothing *)
 				   });
     bcrecorder = BCRecorder.empty;
   }
@@ -490,7 +490,9 @@ let dijkstra_find_path board origin dest =
   in
     printf "dijkstra: starting to compute from %i,%i to %i,%i\n" ox oy dx dy;
     let result = real_dijkstra_find_path board (ox, oy) (dx, dy)
-    in let result = List.map (compute_undisc_middle board) result
+    in
+      printf "SAUBUA 1112";
+    let result = List.map (compute_undisc_middle board) result
     in let rec lpr = function
 	  [] -> ()
       | (x,y) :: r -> printf " (%i,%i)"; lpr r
