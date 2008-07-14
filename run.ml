@@ -1,7 +1,8 @@
 open Statemachines
 open Telemetry
 
-let roversize = 500 (* you want to supersize this? *)
+let roversize = 510 (* you want to supersize this? *)
+let very_close = (250 + 100)
 
 let dir_of_turn w turn = 
   if abs_float (turn) < w.world_straight_max then 
@@ -65,14 +66,19 @@ let time_to speed mypos therepos =
   let dist = Geometry.distanceSq mypos therepos in
   dist / (speed * speed)
 
-let decide_evasion_dir w t turn badguy evade_rel_angle = 
+let decide_evasion_dir w t turn badguy evade_rel_angle request_slowdown = 
   let mypos = (t.x,t.y) in
   let badpos = (badguy.bcx,badguy.bcy) in
   let dist_to_badguy_surface =
     (sqrt (float_of_int (Geometry.distanceSq mypos badpos))) -. (float_of_int badguy.bcr)
   in
   let time_to_impact = dist_to_badguy_surface /. (1. +. (float_of_int t.speed)) in
-  
+
+  (* 
+     let request_slowdown = (dist_to_badguy_surface < (float_of_int very_close)) || request_slowdown in
+     let request_slowdown = (time_to_impact < 1. ) || request_slowdown in
+  *)
+
   let max_rot_accel = w.world_acceleration_tracker.at_max_angular_accel in
 
   let have_max_rot = get_max_rot w t.turning in
@@ -107,66 +113,71 @@ let decide_evasion_dir w t turn badguy evade_rel_angle =
   
   Printf.fprintf stderr "Home is to the %s of badboy\n" (match home_dir with `PreferEvadeRight -> "Right" | _ -> "Left"); 
   
-  if home_dir = curr_dir then
-    match home_dir with `PreferEvadeRight -> `EvadeRight | `PreferEvadeLeft -> `EvadeLeft 
-  else
-    if (home_dir = `PreferEvadeLeft) then
-      if can_turn_l_before_impact then
-	`EvadeLeft
-      else
-	`EvadeRight
-    else (* homedir = `PreferEvadeRight *)
-      if can_turn_r_before_impact then
-	`EvadeRight
-      else
-	`EvadeLeft
+  let evasiondir = 
+    if home_dir = curr_dir then
+      match home_dir with `PreferEvadeRight -> `EvadeRight | `PreferEvadeLeft -> `EvadeLeft 
+    else
+      if (home_dir = `PreferEvadeLeft) then
+	if can_turn_l_before_impact then
+	  `EvadeLeft
+	else
+	  `EvadeRight
+      else (* homedir = `PreferEvadeRight *)
+	if can_turn_r_before_impact then
+	  `EvadeRight
+	else
+	  `EvadeLeft
+  in evasiondir,request_slowdown
 
 
-let evade_obj w t turn badguy evadeto = 
+let evade_obj w t turn badguy evadeto request_slowdown = 
   let mypos = (t.x,t.y) in
   let badpos = (badguy.bcx,badguy.bcy) in
   let evade_rel_angle = Geometry.passing_angle mypos badpos (badguy.bcr + roversize) in
   
-  let evadeto = match evadeto with 
-    | (`EvadeLeft | `EvadeRight) as x -> x
+  let evadeto,request_slowdown = match evadeto with 
+    | (`EvadeLeft | `EvadeRight) as x -> x,request_slowdown
     | `EvadeDunno ->
-	decide_evasion_dir w t turn badguy evade_rel_angle
+	decide_evasion_dir w t turn badguy evade_rel_angle request_slowdown
   in
   Printf.fprintf stderr "Evading to %s\n" (match evadeto with `EvadeLeft-> "Left" | `EvadeRight -> "Right");  
   let evade_angle = 
     (match evadeto with `EvadeLeft -> (+.) | _ -> (-.)) 
       turn evade_rel_angle
   in
-  evade_angle,evadeto
+  evade_angle,evadeto,request_slowdown
 
-
-let evade_objs w t turn ahead evadeto = 
+let sort_by_distance t list = 
   let mypos = (t.x,t.y) in
   let distfromme o = Geometry.distanceSq mypos (o.bcx,o.bcy) in
-  let ahead = List.sort (fun a b -> (distfromme a)-(distfromme b) ) ahead in
-  let rec loop turn evadeto = function
-    | [] -> turn,evadeto 
+  List.sort (fun a b -> (distfromme a)-(distfromme b) ) list
+    
+let evade_objs w t turn ahead evadeto request_slowdown = 
+  let rec loop turn evadeto request_slowdown = function
+    | [] -> turn,evadeto,request_slowdown
     | badguy::rest -> 
-      let turn,evadeto = evade_obj w t turn badguy evadeto in
-      loop turn evadeto rest
+	let turn,evadeto,request_slowdown = evade_obj w t turn badguy evadeto request_slowdown in
+	loop turn evadeto request_slowdown rest
   in
-  loop turn evadeto ahead
+  loop turn evadeto request_slowdown (sort_by_distance t ahead) 
 
-
-let evade_if_necessary w t dir_to_dst = 
-  let rec loop depth direction evadeto = 
+let evade_if_necessary w t dir_to_dst request_slowdown = 
+  let rec loop depth direction evadeto request_slowdown = 
     let depth = depth + 1 in
     let visible_objs =  (List.append t.craters t.boulders) in
     let ahead = find_all_blocking_objs t direction visible_objs in 
     let l = List.length ahead in
     Printf.fprintf stderr "Found %d bad craters!\n" l; 
-    if l > 0 && depth < 3 then 
-      let new_dir,evadeto = evade_objs w t direction ahead evadeto in
-      loop depth new_dir evadeto
+    if l > 0 && depth < 10 then 
+      let new_dir,evadeto,request_slowdown = evade_objs w t direction ahead evadeto request_slowdown in
+      if false (*  Geometry.angle_diff new_dir t.dir > w.world_init.imax_hard_turn *) then
+	direction,request_slowdown
+      else
+	loop depth new_dir evadeto request_slowdown
     else
-      direction
+      direction,request_slowdown
   in
-  loop 0 dir_to_dst `EvadeDunno
+  loop 0 dir_to_dst `EvadeDunno request_slowdown
     
 
 let turncategory world turn = 
@@ -175,22 +186,52 @@ let turncategory world turn =
   else if turn < (world.world_init.imax_turn +. world.world_init.imax_hard_turn) /. 2. then
     `MediumTurn
   else
-    `HardTurn
+    `HardTurn 
     
+let crash_imminent w t = 
+  let mypos = (t.x,t.y) in
 
-let calc_speed world t turn = 
-  let dist_left = 2 * (Geometry.distanceSq (t.x,t.y) (0,0)) in
+  let small = w.world_acceleration_tracker.at_max_angular_accel in
+
+
+  let blocking = find_all_blocking_objs t t.dir (List.append t.boulders t.craters) in
+  let blocking = List.find_all 
+    (fun x -> 
+      let angle = Geometry.passing_angle mypos (x.bcx,x.bcy) x.bcr in
+      (angle < small)
+    ) blocking in
+  
+  match blocking with
+    | _::_ ->
+	let distances = List.map (fun o -> 
+	  let opos = o.bcx,o.bcy in
+	  (sqrt (float_of_int (Geometry.distanceSq mypos opos))) -. (float_of_int o.bcr)
+	) blocking
+	in
+	let min = int_of_float (List.fold_left (fun min v -> if v < min then v else min) (float_of_int w.world_init.idx) distances) in
+	if min < t.speed  then
+	  true
+	else if min <  very_close then
+	  true
+	else
+	  false
+    | _ -> 
+	false
+	  
+let calc_speed world t turn request_slowdown = 
+  let dist_left = (Geometry.distanceSq (t.x,t.y) (0,0)) in
   let timeleft = world.world_init.itime_limit - t.timestamp in
   let secs_left = timeleft / 1000 in
   let neededspeedSq = dist_left / (1 + secs_left * secs_left) in
   let howto_time = 
     if neededspeedSq > (t.speed * t.speed) then
       `Faster
-    else if dist_left < world.world_really_close then
+    else if dist_left < (world.world_really_close * world.world_really_close) then
       `Slower
     else
       `Dontcare
   in
+
   let howto_turn = match turncategory world turn with
     | `HardTurn -> `Slower
     | `MediumTurn -> `Dontcare
@@ -210,17 +251,21 @@ let calc_speed world t turn =
     else
       whattodo 
   in
-  match whattodo with
-    | `Faster -> Accelerating
-    | `Slower -> Breaking
-    | `Dontcare -> Accelerating
-	
+  
+  if crash_imminent world t then
+    (Printf.fprintf stderr "CRASH ALERT\n\n\n"; Breaking)
+  else
+    match whattodo with
+      | `Faster -> Accelerating
+      | `Slower -> Breaking
+      | `Dontcare -> Rolling
+	    
  
 let small_decision_procedure w t = 
   let dst = w.world_dst in
   let dir_to_dst = Geometry.rel_angle_to_point t.dir (t.x,t.y) dst in
-  let turn = evade_if_necessary w t dir_to_dst in
-  let speed = calc_speed w t turn in
+  let turn,request_slowdown = evade_if_necessary w t dir_to_dst false in
+  let speed = calc_speed w t turn request_slowdown in
   speed,(dir_of_turn w turn)
 
       
@@ -235,7 +280,7 @@ let world_init socket =
       world_init = init;
       world_vehicle_state = Breaking,Straight;
       world_straight_max = 0.01;
-      world_min_speed = (init.imax_sensor / 10); 
+      world_min_speed = 0; (* (init.imax_sensor / 10);  *)
       world_max_speed = (3 * init.imax_sensor + init.imin_sensor) / 5;
       world_dst = 0,0;
       world_really_close = 50*1000;

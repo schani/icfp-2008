@@ -92,7 +92,12 @@ let midpoint (x1,y1) (x2,y2) =
 let vec_add  (x1,y1) (x2,y2) = 
   (x1+x2)/2,(y1+y2)/2
     
-
+let angle_diff phi psi = 
+  let diff = phi -. psi in
+  if diff > 180. then
+    360. -. diff
+  else
+    diff
 
 (* calculate relative (to direction towards center) angle to pass by circle *)
 let passing_angle mypos center radius = 

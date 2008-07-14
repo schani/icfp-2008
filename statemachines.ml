@@ -55,9 +55,9 @@ let speed2string = function
 
 let command2string = function speed,turn -> 
   let x = (speed2string speed)^(turn2string turn)^";" in
-  if (String.compare ";" x) = 0 then
+  (* if (String.compare ";" x) = 0 then
     x 
-  else
+     else *)
     ((Printf.fprintf stderr "%s\n" x); x)
 
 let string_of_state (s,t) = 
