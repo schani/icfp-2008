@@ -63,9 +63,9 @@ let sock_recv_next socket =
   in
   loop ();
   let x = Str.bounded_split regex !buffer 2 in
-  Printf.fprintf stderr "XXXX %d %d >%s<\n" (List.length x)
+  (* Printf.fprintf stderr "XXXX %d %d >%s<\n" (List.length x)
     (String.length !buffer) !buffer; 
-  flush stderr;
+     flush stderr; *)
   match x with
     | [cmd;rest] -> (buffer:=rest; Some cmd) 
     | [cmd] -> buffer:=""; Some cmd
