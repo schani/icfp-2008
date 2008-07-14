@@ -54,11 +54,18 @@ let buffer = ref ""
 let regex = Str.regexp ";"
 
 let sock_recv_next socket = 
-  buffer:=(!buffer^(sock_recv_all socket));
+  let rec loop () = 
+    buffer:=(!buffer^(sock_recv_all socket));
+    try 
+      String.index !buffer ';';()
+    with
+      | _ -> loop ()
+  in
+  loop ();
   let x = Str.bounded_split regex !buffer 2 in
-(*Printf.fprintf stderr "XXXX %d %d >%s<\n" (List.length x)
+  Printf.fprintf stderr "XXXX %d %d >%s<\n" (List.length x)
     (String.length !buffer) !buffer; 
-  flush stderr;*)
+  flush stderr;
   match x with
     | [cmd;rest] -> (buffer:=rest; Some cmd) 
     | [cmd] -> buffer:=""; Some cmd

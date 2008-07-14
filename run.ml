@@ -1,7 +1,7 @@
 open Statemachines
 open Telemetry
 
-let roversize = 502 (* you want to supersize this? *)
+let roversize = 500 (* you want to supersize this? *)
 
 let dir_of_turn w turn = 
   if abs_float (turn) < w.world_straight_max then 
@@ -40,12 +40,16 @@ let is_in_anglar_interval needle hayangle haywidth =
 
 let find_all_blocking_objs t dst_angle objs = 
   let mypos = t.x,t.y in
+  let mydistSq = Geometry.distanceSq mypos (0,0) in
   let visible_p o = 
     let ocoord = (o.bcx,o.bcy) in
     let width = Geometry.passing_angle mypos ocoord (o.bcr + roversize) in
     let angle = Geometry.rel_angle_to_point t.dir mypos ocoord in
-    (* Printf.fprintf stderr "angle=%f width=%f radius=%d \n" angle width o.bcr; *)
-    is_in_anglar_interval dst_angle angle width
+    let disttobad = Geometry.distanceSq mypos ocoord in
+    if mydistSq > disttobad then
+      is_in_anglar_interval dst_angle angle width
+    else
+      false
   in 
   List.find_all visible_p objs
 
@@ -140,25 +144,30 @@ let evade_objs w t turn ahead evadeto =
   let mypos = (t.x,t.y) in
   let distfromme o = Geometry.distanceSq mypos (o.bcx,o.bcy) in
   let ahead = List.sort (fun a b -> (distfromme a)-(distfromme b) ) ahead in
-  let badguy = List.hd ahead in
-  let turn = evade_obj w t turn badguy evadeto in
-  turn
+  let rec loop turn evadeto = function
+    | [] -> turn,evadeto 
+    | badguy::rest -> 
+      let turn,evadeto = evade_obj w t turn badguy evadeto in
+      loop turn evadeto rest
+  in
+  loop turn evadeto ahead
 
 
 let evade_if_necessary w t dir_to_dst = 
-  let rec loop direction evadeto = 
+  let rec loop depth direction evadeto = 
+    let depth = depth + 1 in
     let visible_objs =  (List.append t.craters t.boulders) in
     let ahead = find_all_blocking_objs t direction visible_objs in 
     let l = List.length ahead in
     Printf.fprintf stderr "Found %d bad craters!\n" l; 
-    if l > 0 then 
+    if l > 0 && depth < 3 then 
       let new_dir,evadeto = evade_objs w t direction ahead evadeto in
-      loop new_dir evadeto
+      loop depth new_dir evadeto
     else
       direction
   in
-  loop dir_to_dst `EvadeDunno
-   
+  loop 0 dir_to_dst `EvadeDunno
+    
 
 let turncategory world turn = 
   if turn < world.world_init.imax_turn /. 3. then
@@ -190,19 +199,21 @@ let calc_speed world t turn =
   let whattodo = match howto_time,howto_turn with
     | `Faster,`Slower -> `Dontcare
     | `Faster,x -> `Faster
-    | `Slower,_ -> `Slower
-    | `Dontcare,x -> x
+    |  _,x -> x
   in
   let whattodo = 
     if t.speed < world.world_min_speed then
       `Faster
+    else if t.speed > world.world_max_speed then 
+      (Printf.fprintf stderr "ABOVE MAX\n\n\n";
+      `Slower)
     else
       whattodo 
   in
   match whattodo with
     | `Faster -> Accelerating
     | `Slower -> Breaking
-    | `Dontcare -> Rolling
+    | `Dontcare -> Accelerating
 	
  
 let small_decision_procedure w t = 
@@ -223,8 +234,9 @@ let world_init socket =
     {
       world_init = init;
       world_vehicle_state = Breaking,Straight;
-      world_straight_max = 0.1;
+      world_straight_max = 0.01;
       world_min_speed = (init.imax_sensor / 10); 
+      world_max_speed = (3 * init.imax_sensor + init.imin_sensor) / 5;
       world_dst = 0,0;
       world_really_close = 50*1000;
       world_board = Discrete.create_board 51 51 init.idx init.idy

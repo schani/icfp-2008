@@ -88,6 +88,7 @@ type world = {
   world_vehicle_state:vehicle_state;
   world_straight_max:float;
   world_min_speed:int;
+  world_max_speed:int;
   world_dst:int*int;
   world_really_close:int;
   world_board:board;
@@ -149,7 +150,9 @@ let telemetry_of_string str =
 	}::t.martians in
 	parse_rest tl {t with martians=m}
       | "h"::x::y::r::tl -> parse_rest tl t
-      | _ -> failwith ("parse_rest "^str^" hd="^(List.hd list))
+      | _ -> 
+(Printf.fprintf stderr "parse_rest <<<<<%s>>>> hd=%s\n " str (List.hd list);
+	  failwith ("parse_rest <<<<<"^str^">>>> hd="^(List.hd list)))
   in
 
   let list = Str.split spaceregex str in 
