@@ -94,6 +94,8 @@ type world = {
   world_board:board;
   world_acceleration_tracker:acceleration_tracker;
   world_last_step:step;
+  world_current_telemetry:telemetry option;
+  world_aiming_at:float;
 }
      
 
@@ -225,6 +227,7 @@ let merge_telemetry_into_world w t =
     if t.timestamp = 0 then
       {w with 
 	world_vehicle_state = (t.speeding,t.turning);
+	world_current_telemetry = Some t;
       }
     else 
       w

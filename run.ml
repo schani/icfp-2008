@@ -266,7 +266,8 @@ let small_decision_procedure w t =
   let dir_to_dst = Geometry.rel_angle_to_point t.dir (t.x,t.y) dst in
   let turn,request_slowdown = evade_if_necessary w t dir_to_dst false in
   let speed = calc_speed w t turn request_slowdown in
-  speed,(dir_of_turn w turn)
+  let w = {w with world_aiming_at=(t.dir +. turn)} in
+  w,(speed,(dir_of_turn w turn))
 
       
 let world_init socket =
@@ -284,10 +285,12 @@ let world_init socket =
       world_max_speed = (3 * init.imax_sensor + init.imin_sensor) / 5;
       world_dst = 0,0;
       world_really_close = 50*1000;
-      world_board = Discrete.create_board 51 51 init.idx init.idy
+      world_board = Discrete.create_board 501 501 init.idx init.idy
 	init.imin_sensor init.imax_sensor;
       world_last_step = Event;
       world_acceleration_tracker = init_accel_tracker;
+      world_current_telemetry = None;
+      world_aiming_at = 0.;
     }
 
 let world_step world socket =
@@ -316,7 +319,7 @@ let world_step world socket =
 	      (* we know now that everything else must be free space *)
 	      Discrete.register_ellipse world.world_board (t.x, t.y) t.dir;
 	    let world = merge_telemetry_into_world world t in
-	    let wantedstate = small_decision_procedure world t in
+	    let world,wantedstate = small_decision_procedure world t in
 	      
 	    
              (* 
@@ -344,8 +347,7 @@ let world_step world socket =
 	world 
 
 let stupid_loop_one_game socket =
-  let world = world_init socket
-  in
+  let world = world_init socket in
   let rec loop world maxtime = 
     let _ = Communication.waitfordata socket in
     (* let tstart = Sys.time () in *)
