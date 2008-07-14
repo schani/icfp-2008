@@ -97,6 +97,7 @@ type world = {
   world_current_telemetry:telemetry option;
   world_aiming_at:float;
   world_dijstra_path: (int*int) list;
+  world_field_size_squared: int;
 }
      
 

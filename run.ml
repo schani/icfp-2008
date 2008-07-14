@@ -277,6 +277,7 @@ let world_init socket =
     | Some(x) -> x
     | None -> failwith "zeugs"
   in
+  let boardsize_x,boardsize_y = 51,51 in
   let init = initialization_of_string init in
     {
       world_init = init;
@@ -286,13 +287,15 @@ let world_init socket =
       world_max_speed = (3 * init.imax_sensor + init.imin_sensor) / 5;
       world_dst = 0,0;
       world_really_close = 50*1000;
-      world_board = Discrete.create_board 51 51 init.idx init.idy
+      world_board = Discrete.create_board boardsize_x boardsize_y init.idx init.idy
 	init.imin_sensor init.imax_sensor;
       world_last_step = Event;
       world_acceleration_tracker = init_accel_tracker;
       world_current_telemetry = None;
       world_aiming_at = 0.;
       world_dijstra_path = [];
+      world_field_size_squared = (init.idx / boardsize_x)*(init.idx / boardsize_x) +
+	(init.idy / boardsize_y)*(init.idy / boardsize_y);
     }
 
 let take l list =
@@ -313,7 +316,7 @@ let get_dst_from_deikstra world t =
     | x::_ -> 
 	let many = 2 in
 	let dst = Geometry.avg_coords many (take many list) in
-	if (Discrete.discretize_coords b dst) = (Discrete.discretize_coords b no_place_like) then
+	if Geometry.distanceSq dst no_place_like < world.world_field_size_squared then
 	  world,no_place_like
 	else
 	  world,dst

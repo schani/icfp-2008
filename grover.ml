@@ -66,10 +66,15 @@ let draw_bot board (drawing: GDraw.drawable) x y angle angle2 dst =
       ~width:(rnd (dst_r *. 2.)) ~height:(rnd (dst_r *. 2.)) ();
     drawing#set_foreground (`NAME "lightblue");
     drawing#line (rnd f_dx) (rnd f_dy) (rnd line2x) (rnd line2y)
-      
-      
 
-let draw_background board (drawing: GDraw.drawable) =
+let currently_in_path world board xi yi = 
+  let f b coords = 
+    let x,y = (Discrete.discretize_coords board coords) in
+    b || ((rnd x),(rnd y)) = (xi,yi) 
+  in
+  List.fold_left f false !world.world_dijstra_path
+
+let draw_background world board (drawing: GDraw.drawable) =
   let fdrxdim = float_of_int !drawing_xdim
   and fdrydim = float_of_int !drawing_ydim
   and rxdim = float_of_int board.xdim
@@ -90,7 +95,8 @@ let draw_background board (drawing: GDraw.drawable) =
 					     | Partially_Free ->
 						 "darkgray"
 					     | _ -> "white" ));
-	    drawing#rectangle ~filled:false
+	    let filled = currently_in_path world board xi yi in
+	    drawing#rectangle ~filled:filled
 	      ~x:(rnd (fdrxdim *. (foi xi) /. rxdim))
 	      ~y:(rnd (fdrydim -. fdrydim *. (foi yi) /. rydim -. (foi ybs)))
 	      ~width:(xbs - 1) ~height:(ybs - 1) ();
@@ -128,7 +134,7 @@ let redraw_world world (area: GMisc.drawing_area) (drawing: GDraw.drawable) _ =
     f_drawing_ydim := float_of_int y;
     drawing#set_foreground (`NAME "black");
     drawing#rectangle ~filled:true ~x:0 ~y:0 ~width:x ~height:y ();
-    draw_background board drawing;
+    draw_background world board drawing;
     draw_homebase board drawing;
     begin
       match !world.world_current_telemetry with
