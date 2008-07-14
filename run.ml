@@ -1,7 +1,7 @@
 open Statemachines
 open Telemetry
 
-let roversize = 1000 (* you want to supersize this? *)
+let roversize = 510 (* you want to supersize this? *)
 let very_close = (250 + 100)
 let kobayashi_maru_dst = 0,0
 
@@ -40,9 +40,9 @@ let is_in_anglar_interval needle hayangle haywidth =
   diff < haywidth
 
 
-let find_all_blocking_objs t dst_angle objs = 
+let find_all_blocking_objs w t dst_angle objs = 
   let mypos = t.x,t.y in
-  let mydistSq = Geometry.distanceSq mypos (0,0) in
+  let mydistSq = Geometry.distanceSq mypos w.world_dst in
   let visible_p o = 
     let ocoord = (o.bcx,o.bcy) in
     let width = Geometry.passing_angle mypos ocoord (o.bcr + roversize) in
@@ -59,8 +59,8 @@ let print_vec os name vec =
   let x,y = vec in
   Printf.fprintf os "%s=(%d,%d)  " name x y
   
-let obj_ahead_p t dst_angle objs= 
-  let ahead = find_all_blocking_objs t dst_angle objs in
+let obj_ahead_p w t dst_angle objs= 
+  let ahead = find_all_blocking_objs w t dst_angle objs in
   (List.length ahead) > 0
 
 let time_to speed mypos therepos = 
@@ -80,9 +80,9 @@ let decide_evasion_dir w t turn badguy evade_rel_angle request_slowdown =
      let request_slowdown = (time_to_impact < 1. ) || request_slowdown in
   *)
 
-  let max_rot_accel = w.world_acceleration_tracker.at_max_angular_accel in
+  (* let max_rot_accel = w.world_acceleration_tracker.at_max_angular_accel in *)
 
-  let have_max_rot = get_max_rot w t.turning in
+  (* let have_max_rot = get_max_rot w t.turning in *)
 
   let angle_to_bad = (Geometry.angle_to_point mypos badpos) in
 
@@ -106,7 +106,7 @@ let decide_evasion_dir w t turn badguy evade_rel_angle request_slowdown =
       `PreferEvadeRight
   in
   let home_dir = 
-    if Geometry.angle_left_of (Geometry.angle_to_point mypos (0,0)) (Geometry.angle_to_point mypos badpos) then
+    if Geometry.angle_left_of (Geometry.angle_to_point mypos w.world_dst) (Geometry.angle_to_point mypos badpos) then
       `PreferEvadeLeft
     else
       `PreferEvadeRight
@@ -166,7 +166,7 @@ let evade_if_necessary w t dir_to_dst request_slowdown =
   let rec loop depth direction evadeto request_slowdown = 
     let depth = depth + 1 in
     let visible_objs =  (List.append t.craters t.boulders) in
-    let ahead = find_all_blocking_objs t direction visible_objs in 
+    let ahead = find_all_blocking_objs w t direction visible_objs in 
     let l = List.length ahead in
     Printf.fprintf stderr "Found %d bad craters!\n" l; 
     if l > 0 && depth < 10 then 
@@ -195,7 +195,7 @@ let crash_imminent w t =
   let small = w.world_acceleration_tracker.at_max_angular_accel in
 
 
-  let blocking = find_all_blocking_objs t t.dir (List.append t.boulders t.craters) in
+  let blocking = find_all_blocking_objs w t t.dir (List.append t.boulders t.craters) in
   let blocking = List.find_all 
     (fun x -> 
       let angle = Geometry.passing_angle mypos (x.bcx,x.bcy) x.bcr in
@@ -220,7 +220,7 @@ let crash_imminent w t =
 	false
 	  
 let calc_speed world t turn request_slowdown = 
-  let dist_left = (Geometry.distanceSq (t.x,t.y) (0,0)) in
+  let dist_left = (Geometry.distanceSq (t.x,t.y) world.world_dst) in
   let timeleft = world.world_init.itime_limit - t.timestamp in
   let secs_left = timeleft / 1000 in
   let neededspeedSq = dist_left / (1 + secs_left * secs_left) in
@@ -294,21 +294,23 @@ let world_init socket =
       world_aiming_at = 0.;
     }
 
-let take x list =
-  let rec loop x acc = function
+let take l list =
+  let rec loop l acc = function
   | [] -> acc 
-  | x::xs -> if x == 0 then x::acc else loop (x - 1) (x::acc) xs
+  | x::xs -> if l == 0 then acc else loop (l - 1) (x::acc) xs
   in 
-  List.rev (loop x [] list)
+  List.rev (loop l [] list)
 
 let get_dst_from_deikstra world t = 
   let mypos = t.x,t.y in
   let dst = 0,0 in
   let b = world.world_board in
-  let list = Discrete.dijkstra_find_path b mypos dst in
+  let list:(int*int) list = Discrete.dijkstra_find_path b mypos dst in
   match list with
-    | [] -> kobayashi_maru_dst
-    | x::_ -> x
+    | [] -> (Printf.fprintf stderr "failed kobayashi_maru test\n"; kobayashi_maru_dst)
+    | x::_ -> 
+	let many = 2 in
+	Geometry.avg_coords many (take many list)
   
 
 let world_step world socket =
@@ -330,12 +332,12 @@ let world_step world socket =
 	else
 	  begin
 	    let t = telemetry_of_string next in
-	      List.iter (Discrete.register_boldercrater world.world_board)
-		t.boulders;
-	      List.iter (Discrete.register_boldercrater world.world_board)
-		t.craters;
-	      (* we know now that everything else must be free space *)
-	      Discrete.register_ellipse world.world_board (t.x, t.y) t.dir;
+	    List.iter (Discrete.register_boldercrater world.world_board)
+	      t.boulders;
+	    List.iter (Discrete.register_boldercrater world.world_board)
+	      t.craters;
+	    (* we know now that everything else must be free space *)
+	    Discrete.register_ellipse world.world_board (t.x, t.y) t.dir;
 	    let world = merge_telemetry_into_world world t in
 	    let world = {world with world_dst = get_dst_from_deikstra world t} in
 	    let world,wantedstate = small_decision_procedure world t in

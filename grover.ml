@@ -44,9 +44,10 @@ let draw_bc board (drawing: GDraw.drawable) bcr =
     drawing#arc ~filled:false ~x:(rnd (f_dx -. f_rx)) ~y:(rnd (f_dy -. f_ry))
       ~width:(rnd (f_rx *. 2.)) ~height:(rnd (f_ry *. 2.)) ()
 
-let draw_bot board (drawing: GDraw.drawable) x y angle angle2 =
+let draw_bot board (drawing: GDraw.drawable) x y angle angle2 dst =
 (*  printf "draw_bot at %i,%i    angle=%f angle2=%f\n" x y angle angle2; *)
   let f_dx, f_dy = drawcoords_of_gamecoords board (x, y)
+  and dst_x, dst_y = drawcoords_of_gamecoords board (dst)
   and bot_r = 20.0
   and line_len = 150.0
   in let line1x = f_dx +. (cos (angle *. pi /. 180.)) *. line_len
@@ -58,8 +59,11 @@ let draw_bot board (drawing: GDraw.drawable) x y angle angle2 =
     drawing#arc ~filled:false ~x:(rnd (f_dx -. bot_r)) ~y:(rnd (f_dy -. bot_r))
       ~width:(rnd (bot_r *. 2.)) ~height:(rnd (bot_r *. 2.)) ();
     drawing#line (rnd f_dx) (rnd f_dy) (rnd line1x) (rnd line1y);
+    drawing#set_foreground (`NAME "red");
+    drawing#line (rnd f_dx) (rnd f_dy) (rnd dst_x) (rnd dst_y);
     drawing#set_foreground (`NAME "lightblue");
     drawing#line (rnd f_dx) (rnd f_dy) (rnd line2x) (rnd line2y)
+      
 
 let draw_background board (drawing: GDraw.drawable) =
   let fdrxdim = float_of_int !drawing_xdim
@@ -124,7 +128,7 @@ let redraw_world world (area: GMisc.drawing_area) (drawing: GDraw.drawable) _ =
     draw_homebase board drawing;
     begin
       match !world.world_current_telemetry with
-	  Some t -> draw_bot board drawing t.x t.y t.dir !world.world_aiming_at
+	  Some t -> draw_bot board drawing t.x t.y t.dir !world.world_aiming_at !world.world_dst
 	| None -> ()
     end;
     flush stdout;
