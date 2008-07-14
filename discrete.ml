@@ -21,7 +21,7 @@ let neg_dir = function
   | South -> North
   | Start ->
       Printf.fprintf stderr "discrete.neg_dir: error: called with start";
-      Start
+      failwith "neg_dir illegal call"
 
 let make_array_array x y f =
   Array.init y (fun _ -> Array.init x f)
@@ -47,7 +47,7 @@ let create_board x y fx fy minsens maxsens =
 				     enemy_penalty = 0;
 				     dijkstra_cost = 0;
 				     dijkstra_round = 0;
-				     dijkstra_prev = Start; (* means nothing *)
+				     dijkstra_prev = South; (* means nothing *)
 				   });
     bcrecorder = BCRecorder.empty;
   }
@@ -58,8 +58,7 @@ let incr_coords (x,y) = function
   | West -> (x - 1, y)
   | South -> (x, y - 1)
   | Start ->
-      Printf.fprintf stderr "discrete.neg_dir: error: called with start";
-      x,y
+      failwith "discrete.incr_coords: error: called with start"
 
 (* this returns 4 coords of the corners of the discrete field,
    first south west then clockwise *)
@@ -393,10 +392,13 @@ let rec real_dijkstra_find_path board (ox, oy) (dx, dy) =
     printf "real_dijkstra: computing %i,%i to %i,%i..\n" ox oy dx dy;
     let check_neighbours f x y =
       let relax s d rdx rdy dir =
-	if dx = rdx && dy = rdy then
+	if dx = rdx && dy = rdy then begin
 	  (* found goal, make sure it is on top of queue *)
+	  d.dijkstra_round <- !diid;
+	  d.dijkstra_cost <- 0;
+	  d.dijkstra_prev <- neg_dir dir;
 	  queue_insert queue (0, (d, rdx, rdy))
-	else begin
+	end else begin
 	  if d.state = Unknown || d.state = Occupied then begin
 	    (* store best unknown field *)
 	    if d.state = Unknown then begin
@@ -460,19 +462,22 @@ let rec real_dijkstra_find_path board (ox, oy) (dx, dy) =
       end else begin
 	let _, (f,x,y) = queue_fetch_cheapest queue
 	in
-	  printf " q[%i,%i ? %i,%i] " x y dx dy;
+(*	  printf " q[%i,%i ? %i,%i] " x y dx dy; *)
 	  if x = dx && y = dy then (* found goal *)
 	    let rec tracegoal (x, y) result =
+	      printf "<%i,%i> " x y; flush stdout;
 	      let prev = board.fields.(y).(x).dijkstra_prev
 	      in
-		printf "in tracegoal\n";
 		if prev == Start then
 		  result
 		else
 		  tracegoal (incr_coords (x,y) prev) ((x, y) :: result)
 	    in
-	      printf "callin tracegoal\n";
-	      tracegoal (x, y) []
+	      printf "callin tracegoal: ";
+	      let tg = tracegoal (x, y) []
+	      in
+		printf "\n"; flush stdout;
+		tg
 	  else begin
 	    check_neighbours f x y;
 	    loop ();
@@ -491,13 +496,13 @@ let dijkstra_find_path board origin dest =
     printf "dijkstra: starting to compute from %i,%i to %i,%i\n" ox oy dx dy;
     let result = real_dijkstra_find_path board (ox, oy) (dx, dy)
     in
-      printf "SAUBUA 1112";
+      printf "dijsktra result length: %i\n" (List.length result);
     let result = List.map (compute_undisc_middle board) result
     in let rec lpr = function
 	  [] -> ()
-      | (x,y) :: r -> printf " (%i,%i)"; lpr r
+      | (x,y) :: r -> printf " (%i,%i)" x y; flush stdout; lpr r
     in
       printf "dijkstra result="; flush stdout;
       lpr result;
-      printf ".\n";
+      printf ".\n"; flush stdout;
       result
