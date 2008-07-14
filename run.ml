@@ -239,7 +239,7 @@ let world_init socket =
       world_max_speed = (3 * init.imax_sensor + init.imin_sensor) / 5;
       world_dst = 0,0;
       world_really_close = 50*1000;
-      world_board = Discrete.create_board 501 501 init.idx init.idy
+      world_board = Discrete.create_board 51 51 init.idx init.idy
 	init.imin_sensor init.imax_sensor;
       world_last_step = Event;
       world_acceleration_tracker = init_accel_tracker;
@@ -268,6 +268,8 @@ let world_step world socket =
 		t.boulders;
 	      List.iter (Discrete.register_boldercrater world.world_board)
 		t.craters;
+	      (* we know now that everything else must be free space *)
+	      Discrete.register_ellipse world.world_board (t.x, t.y) t.dir;
 	    let world = merge_telemetry_into_world world t in
 	    let wantedstate = small_decision_procedure world t in
 	      

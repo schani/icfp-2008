@@ -63,7 +63,7 @@ let draw_background board (drawing: GDraw.drawable) =
 					     | Partially_Free ->
 						 "darkgray"
 					     | _ -> "white" ));
-	    drawing#rectangle ~filled:true
+	    drawing#rectangle ~filled:false
 	      ~x:(rnd (fdrxdim *. (foi xi) /. rxdim))
 	      ~y:(rnd (fdrydim -. fdrydim *. (foi yi) /. rydim -. (foi ybs)))
 	      ~width:xbs ~height:ybs ();

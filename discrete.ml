@@ -251,9 +251,7 @@ let register_ellipse board (r1x, r1y) angle =
 	for yi = y1 to y2 do
 	  let f = board.fields.(yi).(xi)
 	  in
-	    if f.state = Occupied || f.state = Free then
-	      () (* no need to double check *)
-	    else
+	    if f.state = Unknown then
 	      let (fx1,fy1), (fx2,fy2), (fx3,fy3), (fx4,fy4) =
 		undiscretize_coords board (xi,yi)
 	      and count_inside = ref 0
@@ -263,9 +261,11 @@ let register_ellipse board (r1x, r1y) angle =
 		count_inside := !count_inside + check_inside (fx3,fy3);
 		count_inside := !count_inside + check_inside (fx4,fy4);
 		match !count_inside with
-		    4 -> f.state <- Occupied (* fully inside *)
+		    4 ->
+		      if f.state = Unknown then
+			f.state <- Free; (* fully inside *)
 		  | (-4) -> () (* outside but might not be free *)
-		  | _ -> f.state <- Partially_Free (* partly inside *)
+		  | _ -> () (*f.state <- Partially_Free (* partly inside *) *)
 	done
       done
   in
