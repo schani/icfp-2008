@@ -108,3 +108,10 @@ let passing_angle mypos center radius =
   (* Printf.fprintf stderr "asin(%f/%f) = %f" (float_of_int radius) dist asin; *)
   asin
 
+let avg_coords len list = 
+  let rec loop x y = function
+    | [] -> (x/len,y/len)
+    | (x',y')::more -> 
+	loop (x+x') (y+y') more
+  in
+  loop 0 0 list

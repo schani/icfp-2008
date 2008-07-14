@@ -3,6 +3,7 @@ open Telemetry
 
 let roversize = 1000 (* you want to supersize this? *)
 let very_close = (250 + 100)
+let kobayashi_maru_dst = 0,0
 
 let dir_of_turn w turn = 
   if abs_float (turn) < w.world_straight_max then 
@@ -293,6 +294,23 @@ let world_init socket =
       world_aiming_at = 0.;
     }
 
+let take x list =
+  let rec loop x acc = function
+  | [] -> acc 
+  | x::xs -> if x == 0 then x::acc else loop (x - 1) (x::acc) xs
+  in 
+  List.rev (loop x [] list)
+
+let get_dst_from_deikstra world t = 
+  let mypos = t.x,t.y in
+  let dst = 0,0 in
+  let b = world.world_board in
+  let list = Discrete.dijkstra_find_path b mypos dst in
+  match list with
+    | [] -> kobayashi_maru_dst
+    | x::_ -> x
+  
+
 let world_step world socket =
   flush stderr;
   match Communication.sock_recv_next socket with 
@@ -319,24 +337,9 @@ let world_step world socket =
 	      (* we know now that everything else must be free space *)
 	      Discrete.register_ellipse world.world_board (t.x, t.y) t.dir;
 	    let world = merge_telemetry_into_world world t in
+	    let world = {world with world_dst = get_dst_from_deikstra world t} in
 	    let world,wantedstate = small_decision_procedure world t in
-	      
 	    
-             (* 
-		if world.world_vehicle_state != wantedstate then
-		Printf.fprintf stderr "\nWant: %s\n Have: %s\nReported: %s\n" 
-		(string_of_state wantedstate) 
-		(string_of_state world.world_vehicle_state) 
-		(string_of_state (t.speeding,t.turning));
-	     *)
-	    
-	    (*match world.world_current_telemetry with
-	      | Some(t) -> 
-		  Printf.fprintf stderr "Emp ist ein LUEGER: %d %d\n" t.x t.y;
-	      | None ->
-		  Printf.fprintf stderr "Emp ist kein LUEGER:\n"
-	      *)
-
 	    let rec sending_loop world = 
 	      let command = Statemachines.both_change_to world.world_vehicle_state wantedstate in
 	      let world = {world with world_vehicle_state = (apply_command command world.world_vehicle_state)} in
