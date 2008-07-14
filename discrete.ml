@@ -10,6 +10,10 @@ let param_martian_core_penalty = 50
 let param_martian_penalty_radius = 3
 let param_martian_penalty_decrementer = 12
 
+let rnd x = int_of_float (floor (x +. 0.5))
+let foi = float_of_int
+let iof = int_of_float
+  
 let neg_dir = function
     East -> West
   | North -> South
@@ -60,46 +64,53 @@ let incr_coords (x,y) = function
 (* this returns 4 coords of the corners of the discrete field,
    first south west then clockwise *)
 let undiscretize_coords board (x,y) =
-  let multx = board.rxdim / board.xdim
-  and shiftx = board.rxdim / 2
-  and multy = board.rydim / board.ydim
-  and shifty = board.rydim / 2
+  let f_multx = board.f_rxdim /. board.f_xdim
+  and f_shiftx = board.f_rxdim /. 2.
+  and f_multy = board.f_rydim /. board.f_ydim
+  and f_shifty = board.f_rydim /. 2.
   in
-    (((x * multx - shiftx), (y * multy - shifty)),
-     ((x * multx - shiftx), (y * multy - shifty + multy)),
-     ((x * multx - shiftx + multx), (y * multy - shifty + multy)),
-     ((x * multx - shiftx + multx), (y * multy - shifty)))
+    ((((foi x) *. f_multx -. f_shiftx), (* x1 *)
+      ((foi y) *. f_multy -. f_shifty)), (* y1 *)
+     (((foi x) *. f_multx -. f_shiftx), (* x2 *)
+      ((foi y) *. f_multy -. f_shifty +. f_multy)), (* y2 *)
+     (((foi x) *. f_multx -. f_shiftx +. f_multx), (* x3 *)
+      ((foi y) *. f_multy -. f_shifty +. f_multy)), (* y3 *)
+     (((foi x) *. f_multx -. f_shiftx +. f_multx), (* x4 *)
+      ((foi y) *. f_multy -. f_shifty))) (* y4 *)
 
 let discretize_coords board (fx,fy) =
-  (board.xdim * fx / board.rxdim + board.xdim / 2,
-   board.ydim * fy / board.rydim + board.ydim /
-     
-(* tests:
-  discretize_coords { xdim = 9; ydim = 9; rxdim = 90; rydim = 90 } (0,0)
+  (board.f_xdim *. (foi fx) /. board.f_rxdim +. board.f_xdim /. 2.,
+   board.f_ydim *. (foi fy) /. board.f_rydim +. board.f_ydim /. 2.)
 
-  discretize_coords { xdim = 9; ydim = 9; rxdim = 90; rydim = 90 } (-50,-50)
+let f_discretize_coords board (fx,fy) = (* float version *)
+  (board.f_xdim *. fx /. board.f_rxdim +. board.f_xdim /. 2.,
+   board.f_ydim *. fy /. board.f_rydim +. board.f_ydim /. 2.)
+
+let sinvollify_coord max = function
+    v when v < 0 -> 0
+  | v when v >= max -> max - 1
+  | v -> v
   
-  discretize_coords { xdim = 9; ydim = 9; rxdim = 90; rydim = 90 } (39,40)
-*)
-
-2)
-
 let discrete_inner_range board (fx1, fy1) (fx2, fy2) =
-  let x1,y1 = discretize_coords board (fx1, fy1)
-  and x2,y2 = discretize_coords board (fx2, fy2)
-  in let x1,y1 = x1 + 1, y1 + 1
-     and x2,y2 = x2 - 1, y2 - 1
+  let x1,y1 = f_discretize_coords board (fx1, fy1)
+  and x2,y2 = f_discretize_coords board (fx2, fy2)
+  in let x1,y1 = (iof (floor x1)) + 1, (iof (floor y1)) + 1
+     and x2,y2 = (iof (ceil x2)) - 1, (iof (ceil y2)) - 1
   in
     if x1 > x2 || y1 > y2 then (* range might be non existant *)
       None
     else
-      Some ((x1,y1), (x2, y2))
+      Some ((sinvollify_coord board.xdim x1, sinvollify_coord board.ydim y1),
+	    (sinvollify_coord board.xdim x2, sinvollify_coord board.ydim y2))
 
 let discrete_outer_range board (fx1, fy1) (fx2, fy2) =
-  let x1,y1 = discretize_coords board (fx1, fy1)
-  and x2,y2 = discretize_coords board (fx2, fy2)
+  let x1,y1 = f_discretize_coords board (fx1, fy1)
+  and x2,y2 = f_discretize_coords board (fx2, fy2)
+  in let (x1, y1), (x2, y2) =
+      (iof (floor x1), iof (floor y1)), (iof (ceil x2), iof (ceil y2))
   in
-    (x1,y1), (x2, y2)
+    (((sinvollify_coord board.xdim x1), (sinvollify_coord board.ydim y1)),
+     ((sinvollify_coord board.xdim x1), (sinvollify_coord board.ydim y1)))
 
 (* API: this can be used to register a geometric circle into the
    discrete map.
@@ -109,23 +120,27 @@ let discrete_outer_range board (fx1, fy1) (fx2, fy2) =
    in inner rectangles will be skipped anyway.
 *)
 let register_boldercrater board bcr =
-  let x = bcr.Telemetry.bcx
-  and y = bcr.Telemetry.bcy
-  and r = bcr.Telemetry.bcr
-  in
-    if BCRecorder.mem bcr board.bcrecorder then (* prohibits doulbes *)
-      ()
-    else begin (* skip circles that are already known *)
+  if BCRecorder.mem bcr board.bcrecorder then (* prohibits doulbes *)
+    ()
+  else begin (* skip circles that are already known *)
+    let x = bcr.Telemetry.bcx
+    and y = bcr.Telemetry.bcy
+    and r = bcr.Telemetry.bcr
+    in let f_x = foi x
+       and f_y = foi y
+       and f_r = foi r
+    in
       fprintf stdout "registering bouldercrater at %i,%i\n" x y;
       board.bcrecorder <- BCRecorder.add bcr board.bcrecorder;
-      let rsquare = r * r
+      let f_rsquare = f_r *. f_r
       in let check_inside (cx, cy) =
-(*	  fprintf stdout "check_inside (%i, %i)   circ at (%i, %i, r=%i)\n"
-	    cx cy x y r; *)
-	   if (x - cx) * (x - cx) + (y - cy) * (y - cy) < rsquare then
-	     1 (* inside *)
-	   else
-	     (-1) (* outside *)
+	  (*	  fprintf stdout "check_inside (%i, %i)   circ at (%i, %i, r=%i)\n"
+		  cx cy x y r; *)
+	  if (f_x -. cx) *. (f_x -. cx) +.
+	    (f_y -. cy) *. (f_y -. cy) < f_rsquare then
+	      1 (* inside *)
+	  else
+	    (-1) (* outside *)
       in let flag_as_occupied board (x1, y1) (x2, y2) bcr =
 	  for xi = x1 to x2 do
 	    for yi = y1 to y2 do
@@ -163,26 +178,26 @@ let register_boldercrater board bcr =
 			  f.bouldercraters <- bcr :: f.bouldercraters
 	     done
 	  done
-      in let fr = float_of_int r; (* calculate inner square *)
-      in let fh = fr /. sqrt(2.0);
-      in let h = int_of_float fh
+      in let f_h = f_r /. sqrt(2.0);
       in
 	begin
-	  match discrete_inner_range board (x - h, y - h) (x + h, y + h) with
-	      Some (c1, c2) ->
-		printf "checking inner range: %i,%i - %i,%i [%i,%i - %i,%i]\n"
-		  (x - h) (y - h) (x + h) (y + h)
-		  (fst c1) (snd c1) (fst c2) (snd c2);
+	  match discrete_inner_range board
+	    (f_x -. f_h, f_y -. f_h) (f_x +. f_h, f_y +. f_h) with
+		Some (c1, c2) ->
+		  printf "checking inner range: %f,%f - %f,%f [%i,%i - %i,%i]\n"
+		    (f_x -. f_h) (f_y -. f_h) (f_x +. f_h) (f_y +. f_h)
+		    (fst c1) (snd c1) (fst c2) (snd c2);
 		flag_as_occupied board c1 c2 bcr
 	    | None -> () (* inner range might be empty *);
 	end;
-	let c1, c2 = discrete_outer_range board (x - r, y - r) (x + r, y + r)
+	let c1, c2 = discrete_outer_range board
+	  (f_x -. f_r, f_y -. f_r) (f_x +. f_r, f_y +. f_r)
 	in
-	  printf "checking outer range: %i,%i - %i,%i [%i,%i - %i,%i]\n"
-		  (x - r) (y - r) (x + r) (y + r)
+	  printf "checking outer range: %f,%f - %f,%f [%i,%i - %i,%i]\n"
+	    (f_x -. f_r) (f_y -. f_r) (f_x +. f_r) (f_y +. f_r)
 	    (fst c1) (snd c1) (fst c2) (snd c2);
 	  check_for_occupied c1 c2
-    end
+  end
 
 (* API: this can be used to register the view ellipse, works like
    register_boldercrater but marks space as free not occupied.
@@ -191,26 +206,25 @@ let register_boldercrater board bcr =
    It first approximates a inner circle and then make hard work on remaining
    fields in outer rectangle.
 *)
-let register_ellipse board (f1x, f1y) angle =
-  let p = board.minsens
-  and q = board.maxsens
-  in let a = (p + q) / 2
-     and e = (q - p) / 2
-  in let bsquare = a * a - e * e
-  in let fb = sqrt (float_of_int bsquare)
+(* note: this fun is floatified without f_ prefixes *)
+let register_ellipse board (r1x, r1y) angle =
+  let p = board.f_minsens
+  and q = board.f_maxsens
+  and f1x = foi r1x
+  and f1y = foi r1y
+  in let a = (p +. q) /. 2.
+     and e = (q -. p) /. 2.
+  in let bsquare = a *. a -. e *. e
+  in let fb = sqrt bsquare
      and cosangle = cos(angle *. pi /. 180.)
      and sinangle = sin(angle *. pi /. 180.)
-  in let fmx = (float_of_int f1x) +. (float_of_int e) *. cosangle
-     and fmy = (float_of_int f1y) +. (float_of_int e) *. sinangle
-     and ff2x = (float_of_int f1x) +. 2. *. (float_of_int e) *. cosangle
-     and ff2y = (float_of_int f1y) +. 2. *. (float_of_int e) *. sinangle
+  in let f_mx = f1x +. e *. cosangle
+     and f_my = f1y +. e *. sinangle
+     and f2x = f1x +. 2. *. e *. cosangle
+     and f2y = f1y +. 2. *. e *. sinangle
       (* now flag circle located at mx,my with radius b *)
-  in let mx = int_of_float fmx
-     and my = int_of_float fmy
-     and f2x = int_of_float ff2x
-     and f2y = int_of_float ff2y
-     and f2a = float_of_int (2 * a)
-  in let fh = fb *. sqrt(2.0)
+     and f_2a = 2. *. a
+  in let f_h = fb *. sqrt(2.0)
   in let flag_as_free board (x1, y1) (x2, y2) =
       for xi = x1 to x2 do
 	for yi = y1 to y2 do
@@ -221,10 +235,10 @@ let register_ellipse board (f1x, f1y) angle =
   in let check_inside (cx, cy) =
       (* my theory: if sum of distance to F1 and F2 is more then 2a then
 	 point lies outside, else inside *)
-      let sqr1 = (f1x - cx) * (f1x - cx) + (f1y - cy) * (f1y - cy)
-      and sqr2 = (f2x - cx) * (f2x - cx) + (f2y - cy) * (f2y - cy)
+      let f_sqr1 = (f1x -. cx) *. (f1x -. cx) +. (f1y -. cy) *. (f1y -. cy)
+      and f_sqr2 = (f2x -. cx) *. (f2x -. cx) +. (f2y -. cy) *. (f2y -. cy)
       in
-	if (sqrt (float_of_int sqr1)) +. (sqrt (float_of_int sqr2)) > f2a then
+	if (sqrt f_sqr1) +. (sqrt f_sqr2) > f_2a then
 	  (-1) (* outside *)
 	else
 	  1 (* inside *)
@@ -250,14 +264,15 @@ let register_ellipse board (f1x, f1y) angle =
 		  | _ -> f.state <- Partially_Free (* partly inside *)
 	done
       done
-  in let h = int_of_float fh
   in
     begin
-      match discrete_inner_range board (mx - h, my - h) (mx + h, my + h) with
-	  Some (c1, c2) -> flag_as_free board c1 c2
-	| None -> () (* inner range might be empty *);
+      match discrete_inner_range board
+	(f_mx -. f_h, f_my -. f_h) (f_mx +. f_h, f_my +. f_h) with
+	    Some (c1, c2) -> flag_as_free board c1 c2
+	  | None -> () (* inner range might be empty *);
     end;
-    let c1, c2 = discrete_outer_range board (mx - a, my - a) (mx + a, my + a)
+    let c1, c2 = discrete_outer_range board
+      (f_mx -. a, f_my -. a) (f_mx +. a, f_my +. a)
     in
       check_for_free c1 c2
 

@@ -1,28 +1,29 @@
 open Printf
 open Telemetry
 
-let drawing_xdim = ref 800
-let drawing_ydim = ref 800
-let f_drawing_xdim = ref 800.0
-let f_drawing_ydim = ref 800.0
+let drawing_xdim = ref 801
+let drawing_ydim = ref 801
+let f_drawing_xdim = ref 801.0
+let f_drawing_ydim = ref 801.0
 
-let round x = int_of_float (floor (x +. 0.5))
+let rnd x = int_of_float (floor (x +. 0.5))
 let foi = float_of_int
 
 let drawlength_of_gamelength board (x,y) =
-  round ((foi x) *. !f_drawing_xdim /. board.f_rxdim),
-  round ((foi y) *. !f_drawing_ydim /. board.f_rydim)
+  (foi x) *. !f_drawing_xdim /. board.f_rxdim,
+  (foi y) *. !f_drawing_ydim /. board.f_rydim
 
 let drawcoords_of_gamecoords board (x,y) =
-  let fxshift = board.rxdim / 2
-  and fyshift = board.rydim / 2
+  let f_rxshift = board.f_rxdim /. 2.
+  and f_ryshift = board.f_rydim /. 2.
   in
-    ((x + fxshift) * !drawing_xdim / board.rxdim,
-     (!drawing_ydim - (y + fyshift) * !drawing_ydim / board.rydim))
+    (((foi x) +. f_rxshift) *. !f_drawing_xdim /. board.f_rxdim,
+     ((!f_drawing_ydim -. 1.0) -. ((foi y) +. f_ryshift) *.
+	!f_drawing_ydim /. board.f_rydim))
 
 let create_main_window () =
-  let win = GWindow.window ~width:800 ~height:800 ()
-  in let area = GMisc.drawing_area ~width:800 ~height:800 ~packing:win#add ()
+  let win = GWindow.window ~width:801 ~height:801 ()
+  in let area = GMisc.drawing_area ~width:801 ~height:801 ~packing:win#add ()
   in let drawing = area#misc#realize (); new GDraw.drawable (area#misc#window)
   in let style = area#misc#style#copy
   in
@@ -32,22 +33,22 @@ let create_main_window () =
     win, area, drawing
 
 let draw_bc board (drawing: GDraw.drawable) bcr =
-  let dx, dy = drawcoords_of_gamecoords board (bcr.bcx, bcr.bcy)
-  and rx, ry = drawlength_of_gamelength board (bcr.bcr, bcr.bcr)
+  let f_dx, f_dy = drawcoords_of_gamecoords board (bcr.bcx, bcr.bcy)
+  and f_rx, f_ry = drawlength_of_gamelength board (bcr.bcr, bcr.bcr)
   in
     drawing#set_foreground (`NAME (match bcr.bctype with
 				       Boulder -> "gray"
 				     | Crater -> "brown"));
-    drawing#arc ~filled:false ~x:(dx - rx) ~y:(dy - ry)
-      ~width:(rx * 2) ~height:(ry * 2) ()
+    drawing#arc ~filled:false ~x:(rnd (f_dx -. f_rx)) ~y:(rnd (f_dy -. f_ry))
+      ~width:(rnd (f_rx *. 2.)) ~height:(rnd (f_ry *. 2.)) ()
 
 let draw_background board (drawing: GDraw.drawable) =
   let fdrxdim = float_of_int !drawing_xdim
   and fdrydim = float_of_int !drawing_ydim
   and rxdim = float_of_int board.xdim
   and rydim = float_of_int board.ydim
-  in let xbs = round (fdrxdim /. rxdim)
-     and ybs = round (fdrydim /. rydim)
+  in let xbs = rnd (fdrxdim /. rxdim)
+     and ybs = rnd (fdrydim /. rydim)
   in
     for yi = 0 to (board.ydim - 1)
     do
@@ -63,20 +64,23 @@ let draw_background board (drawing: GDraw.drawable) =
 						 "darkgray"
 					     | _ -> "white" ));
 	    drawing#rectangle ~filled:true
-	      ~x:(round (fdrxdim *. (foi xi) /. rxdim))
-	      ~y:(round (fdrydim -. fdrydim *. (foi yi) /. rydim -. (foi ybs)))
+	      ~x:(rnd (fdrxdim *. (foi xi) /. rxdim))
+	      ~y:(rnd (fdrydim -. fdrydim *. (foi yi) /. rydim -. (foi ybs)))
 	      ~width:xbs ~height:ybs ();
 	  end
       done
     done
 
 let draw_homebase board (drawing: GDraw.drawable) =
-  let dx, dy = drawcoords_of_gamecoords board (0, 0)
-  and rx, ry = drawlength_of_gamelength board (2500, 2500)
+  let f_dx, f_dy = drawcoords_of_gamecoords board (0, 0)
+  and f_rx, f_ry = drawlength_of_gamelength board (2500, 2500)
   in
+    printf "drawing homebase at %f,%f (%i,%i size: %i,%i)\n" f_dx f_dy
+      (rnd (f_dx -. f_rx)) (rnd (f_dy -. f_ry))
+      (rnd (f_rx *. 2.)) (rnd (f_ry *. 2.));
     drawing#set_foreground (`NAME "green");
-    drawing#arc ~filled:false ~x:(dx - rx) ~y:(dy - ry)
-      ~width:(rx * 2) ~height:(ry * 2) ()
+    drawing#arc ~filled:false ~x:(rnd (f_dx -. f_rx)) ~y:(rnd (f_dy -. f_ry))
+      ~width:(rnd (f_rx *. 2.)) ~height:(rnd (f_ry *. 2.)) ()
 
 let drawing_hacks board (drawing: GDraw.drawable) =
   for i = 0 to board.xdim - 1
