@@ -78,6 +78,15 @@ let undiscretize_coords board (x,y) =
      (((foi x) *. f_multx -. f_shiftx +. f_multx), (* x4 *)
       ((foi y) *. f_multy -. f_shifty))) (* y4 *)
 
+let compute_undisc_middle board (x,y) =
+  let f_multx = board.f_rxdim /. board.f_xdim
+  and f_shiftx = board.f_rxdim /. 2.
+  and f_multy = board.f_rydim /. board.f_ydim
+  and f_shifty = board.f_rydim /. 2.
+  in
+    (rnd ((foi x) *. f_multx -. f_shiftx +. f_multx /. 2.),
+     rnd ((foi y) *. f_multy -. f_shifty +. f_multy /. 2.))
+
 let discretize_coords board (fx,fy) =
   (board.f_xdim *. (foi fx) /. board.f_rxdim +. board.f_xdim /. 2.,
    board.f_ydim *. (foi fy) /. board.f_rydim +. board.f_ydim /. 2.)
@@ -141,7 +150,7 @@ let register_boldercrater board bcr =
 	      1 (* inside *)
 	  else
 	    (-1) (* outside *)
-      in let flag_as_occupied board (x1, y1) (x2, y2) bcr =
+(*      in let flag_as_occupied board (x1, y1) (x2, y2) bcr =
 	  for xi = x1 to x2 do
 	    for yi = y1 to y2 do
 	      let f = board.fields.(yi).(xi)
@@ -149,27 +158,30 @@ let register_boldercrater board bcr =
 		f.state <- Occupied;
 		f.bouldercraters <- bcr :: f.bouldercraters;
 	    done
-	  done
+	  done*)
       in let check_geometric f (fx1, fy1) (fx3, fy3) =
 	  if fx1 < f_x && f_x < fx3 &&
 	    fy1 < f_y && f_y < fy3 then
 	      true
 	  else (* now we know that middle of circle is not in field
 	       *)
-	    if fx1 < f_x && f_x < fx3 && fy3 < f_y && (f_y -. fy3) < f_r then (* circle must be north *)
-	      true
-	    else
-	      if fx1 < f_x && f_x < fx3 && fy1 > f_y && (fy1 -. f_y) < f_r then (* south *)
+	    if fx1 < f_x && f_x < fx3 &&
+	      fy3 < f_y && (f_y -. fy3) < f_r then (* circle must be north *)
 		true
-	      else
-		if fy1 < f_y && f_y < fy3 && fx1 > f_x &&(fx1 -. f_x) < f_r then (* west *)
+	    else
+	      if fx1 < f_x && f_x < fx3 &&
+		fy1 > f_y && (fy1 -. f_y) < f_r then (* south *)
 		  true
-		else
-		  if fy1 < f_y && f_y < fy3 && fx3 < f_x && (f_x -. fx3) < f_r then (* east *)
+	      else
+		if fy1 < f_y && f_y < fy3 &&
+		  fx1 > f_x &&(fx1 -. f_x) < f_r then (* west *)
 		    true
+		else
+		  if fy1 < f_y && f_y < fy3 &&
+		    fx3 < f_x && (f_x -. fx3) < f_r then (* east *)
+		      true
 		  else
 		    false
-	      
       in let check_for_occupied (x1, y1) (x2, y2) =
 	  for xi = x1 to x2 do
 	    for yi = y1 to y2 do
@@ -202,9 +214,9 @@ let register_boldercrater board bcr =
 			  f.bouldercraters <- bcr :: f.bouldercraters
 	     done
 	  done
-      in let f_h = f_r /. sqrt(2.0);
+      in(* let f_h = f_r /. sqrt(2.0);
       in
-	(*
+	
 	begin
 	  match discrete_inner_range board
 	    (f_x -. f_h, f_y -. f_h) (f_x +. f_h, f_y +. f_h) with
@@ -240,8 +252,8 @@ let register_ellipse board (r1x, r1y) angle =
   and f1y = foi r1y
   in let a = (p +. q) /. 2.
      and e = (q -. p) /. 2.
-  in let bsquare = a *. a -. e *. e
-  in let fb = sqrt bsquare
+(*  in let bsquare = a *. a -. e *. e *)
+(*  in let fb = sqrt bsquare*)
      and cosangle = cos(angle *. pi /. 180.)
      and sinangle = sin(angle *. pi /. 180.)
   in let f_mx = f1x +. e *. cosangle
@@ -250,14 +262,14 @@ let register_ellipse board (r1x, r1y) angle =
      and f2y = f1y +. 2. *. e *. sinangle
       (* now flag circle located at mx,my with radius b *)
      and f_2a = 2. *. a
-  in let f_h = fb *. sqrt(2.0)
+(*  in let f_h = fb *. sqrt(2.0)
   in let flag_as_free board (x1, y1) (x2, y2) =
       for xi = x1 to x2 do
 	for yi = y1 to y2 do
 	  if board.fields.(yi).(xi).state = Unknown then
 	    board.fields.(yi).(xi).state <- Free;
 	done
-      done
+      done *)
   in let check_inside (cx, cy) =
       (* my theory: if sum of distance to F1 and F2 is more then 2a then
 	 point lies outside, else inside *)
@@ -367,21 +379,33 @@ let queue_fetch_cheapest q =
 let queue_remove q e =
     q := PriSet.remove e !q
 
+let queue_is_empty q =
+  PriSet.is_empty !q
 
 (* dijkstra round id: stores the current round *)
 let diid = ref 0
 
 (* API: use this to find a way to a destination *)
-let dijkstra_find_path board origin dest =
-  let queue = ref PriSet.empty
-  in let ox,oy = origin
-     and dx,dy = dest
+let rec dijkstra_find_path board origin dest =
+  let best_unknown = ref None
+  and queue = ref PriSet.empty
+  in let f_ox,f_oy = discretize_coords board origin
+     and f_dx,f_dy = discretize_coords board dest
+  in let ox,oy = rnd f_ox, rnd f_oy
+     and dx,dy = rnd f_dx, rnd f_dy
      and check_neighbours f x y =
       let relax s d dx dy dir =
-	if d.state = Unknown || d.state = Occupied then
-	  (* skip unkown and occupied fields *)
-	  ()
-	else
+	if d.state = Unknown || d.state = Occupied then begin
+	  (* store best unknown field *)
+	  if d.state = Unknown then begin
+	    match !best_unknown with
+		None ->
+		  best_unknown := Some ((dx, dy), s.dijkstra_cost)
+	      | Some (_, oldcost) -> 
+		  if oldcost >= s.dijkstra_cost then
+		    best_unknown := Some ((dx, dy), s.dijkstra_cost)
+	  end
+	end else
 	  let negdir = neg_dir dir
 	    (* calculate cost bonuses and maluses in here *)
 	  in let n = param_base_cost +
@@ -424,21 +448,29 @@ let dijkstra_find_path board origin dest =
     start_field.dijkstra_prev <- Start;
     queue_insert queue (0, (start_field, ox, oy));
     let rec loop () =
-      let _, (f,x,y) = queue_fetch_cheapest queue
-      in
-	if x = dx && y = dy then (* found goal *)
-	  let rec tracegoal (x, y) result =
-	    let prev = board.fields.(y).(x).dijkstra_prev
+      if queue_is_empty queue then begin (* did not found homebase *)
+	match !best_unknown with
+	    None -> []
+	  | Some (a, _) ->
+	      dijkstra_find_path board origin (compute_undisc_middle board a)
+      end else begin
+	let _, (f,x,y) = queue_fetch_cheapest queue
+	in
+	  if x = dx && y = dy then (* found goal *)
+	    let rec tracegoal (x, y) result =
+	      let prev = board.fields.(y).(x).dijkstra_prev
+	      in
+		if prev == Start then
+		  result
+		else
+		  tracegoal (incr_coords (x,y) prev)
+		    (compute_undisc_middle board (x, y) :: result)
 	    in
-	      if prev == Start then
-		result
-	      else
-		tracegoal (incr_coords (x,y) prev) ((x, y) :: result)
-	  in
-	    tracegoal (x, y) []
-	else begin
-	  check_neighbours f x y;
-	  loop ();
-	end
+	      tracegoal (x, y) []
+	  else begin
+	    check_neighbours f x y;
+	    loop ();
+	  end
+      end
     in
       loop ()
