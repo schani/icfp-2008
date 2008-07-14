@@ -223,13 +223,13 @@ let merge_nontelemetry_into_world w e =
   w
 
 let merge_telemetry_into_world w t = 
+  let w = {w with world_current_telemetry = Some t;} in
   let w = 
     if t.timestamp = 0 then
       {w with 
 	world_vehicle_state = (t.speeding,t.turning);
-	world_current_telemetry = Some t;
       }
-    else 
+    else
       w
   in
   let w = 
