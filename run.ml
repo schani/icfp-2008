@@ -292,6 +292,7 @@ let world_init socket =
       world_acceleration_tracker = init_accel_tracker;
       world_current_telemetry = None;
       world_aiming_at = 0.;
+      world_dijstra_path = [];
     }
 
 let take l list =
@@ -303,16 +304,20 @@ let take l list =
 
 let get_dst_from_deikstra world t = 
   let mypos = t.x,t.y in
-  let dst = 0,0 in
+  let no_place_like = 0,0 in
   let b = world.world_board in
-  let list:(int*int) list = Discrete.dijkstra_find_path b mypos dst in
+  let list = Discrete.dijkstra_find_path b mypos no_place_like in
+  let world = {world with world_dijstra_path = list} in
   match list with
-    | [] -> (Printf.fprintf stderr "failed kobayashi_maru test\n"; kobayashi_maru_dst)
+    | [] -> (Printf.fprintf stderr "failed kobayashi_maru test\n"; world,kobayashi_maru_dst)
     | x::_ -> 
 	let many = 2 in
-	Geometry.avg_coords many (take many list)
-  
-
+	let dst = Geometry.avg_coords many (take many list) in
+	if (Discrete.discretize_coords b dst) = (Discrete.discretize_coords b no_place_like) then
+	  world,no_place_like
+	else
+	  world,dst
+	
 let world_step world socket =
   flush stderr;
   match Communication.sock_recv_next socket with 
@@ -339,7 +344,8 @@ let world_step world socket =
 	    (* we know now that everything else must be free space *)
 	    Discrete.register_ellipse world.world_board (t.x, t.y) t.dir;
 	    let world = merge_telemetry_into_world world t in
-	    let world = {world with world_dst = get_dst_from_deikstra world t} in
+	    let world,new_dest = get_dst_from_deikstra world t in
+	    let world = {world with world_dst = new_dest} in
 	    let world,wantedstate = small_decision_procedure world t in
 	    
 	    let rec sending_loop world = 

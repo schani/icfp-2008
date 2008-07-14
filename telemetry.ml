@@ -96,6 +96,7 @@ type world = {
   world_last_step:step;
   world_current_telemetry:telemetry option;
   world_aiming_at:float;
+  world_dijstra_path: (int*int) list;
 }
      
 
