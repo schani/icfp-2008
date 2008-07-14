@@ -1,6 +1,8 @@
 open Printf
 open Telemetry
 
+let pi = 3.1415926535897932384626433
+
 let drawing_xdim = ref 801
 let drawing_ydim = ref 801
 let f_drawing_xdim = ref 801.0
@@ -41,6 +43,23 @@ let draw_bc board (drawing: GDraw.drawable) bcr =
 				     | Crater -> "brown"));
     drawing#arc ~filled:false ~x:(rnd (f_dx -. f_rx)) ~y:(rnd (f_dy -. f_ry))
       ~width:(rnd (f_rx *. 2.)) ~height:(rnd (f_ry *. 2.)) ()
+
+let draw_bot board (drawing: GDraw.drawable) x y angle angle2 =
+(*  printf "draw_bot at %i,%i    angle=%f angle2=%f\n" x y angle angle2; *)
+  let f_dx, f_dy = drawcoords_of_gamecoords board (x, y)
+  and bot_r = 20.0
+  and line_len = 150.0
+  in let line1x = f_dx +. (cos (angle *. pi /. 180.)) *. line_len
+     and line1y = f_dy -. (sin (angle *. pi /. 180.)) *. line_len
+     and line2x = f_dx +. (cos (angle2 *. pi /. 180.)) *. line_len
+     and line2y = f_dy -. (sin (angle2 *. pi /. 180.)) *. line_len
+  in
+    drawing#set_foreground (`NAME "yellow");
+    drawing#arc ~filled:false ~x:(rnd (f_dx -. bot_r)) ~y:(rnd (f_dy -. bot_r))
+      ~width:(rnd (bot_r *. 2.)) ~height:(rnd (bot_r *. 2.)) ();
+    drawing#line (rnd f_dx) (rnd f_dy) (rnd line1x) (rnd line1y);
+    drawing#set_foreground (`NAME "lightblue");
+    drawing#line (rnd f_dx) (rnd f_dy) (rnd line2x) (rnd line2y)
 
 let draw_background board (drawing: GDraw.drawable) =
   let fdrxdim = float_of_int !drawing_xdim
@@ -99,8 +118,17 @@ let redraw_world world (area: GMisc.drawing_area) (drawing: GDraw.drawable) _ =
     f_drawing_xdim := float_of_int x;
     drawing_ydim := y;
     f_drawing_ydim := float_of_int y;
+    drawing#set_foreground (`NAME "black");
+    drawing#rectangle ~filled:true ~x:0 ~y:0 ~width:x ~height:y ();
     draw_background board drawing;
     draw_homebase board drawing;
+    begin
+      match !world.world_current_telemetry with
+	  Some t -> draw_bot board drawing t.x t.y t.dir !world.world_aiming_at
+	| None -> ()
+    end;
+    flush stdout;
+
     BCRecorder.iter (draw_bc board drawing) board.bcrecorder;
 (*    drawing_hacks board drawing; *)
     true
@@ -142,7 +170,10 @@ let main () =
 		~callback:(redraw_world world area drawing));
       ignore (GMain.Io.add_watch ch ~prio:0 ~cond:[`IN; `HUP; `ERR]
 		~callback:input_callback);
+      (*
       ignore (GMain.Idle.add (redraw_world world area drawing));
+      *)
+      GMain.Timeout.add 100 (redraw_world world area drawing);
       GMain.Main.main ()
 
 let _ =

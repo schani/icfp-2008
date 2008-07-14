@@ -150,6 +150,12 @@ let register_boldercrater board bcr =
 		f.bouldercraters <- bcr :: f.bouldercraters;
 	    done
 	  done
+      in let check_geometric f (fx1, fy1) (fx3, fy3) =
+	  if fx1 < f_x && f_x < fx3 &&
+	    fy1 < f_y && f_y < fy3 then
+	      true
+	  else
+	    false
       in let check_for_occupied (x1, y1) (x2, y2) =
 	  for xi = x1 to x2 do
 	    for yi = y1 to y2 do
@@ -166,14 +172,16 @@ let register_boldercrater board bcr =
 		    count_inside := !count_inside + check_inside (fx2,fy2);
 		    count_inside := !count_inside + check_inside (fx3,fy3);
 		    count_inside := !count_inside + check_inside (fx4,fy4);
-		    printf "cound_inside is %i\n" !count_inside;
 		    match !count_inside with
 			4 -> (* fully inside *)
-			  printf "SAUBUA DEPPATA\n";
 			  f.state <- Occupied; 
 			  f.bouldercraters <- bcr :: f.bouldercraters
 		      | (-4) ->
-			  () (* outside *)
+			  if check_geometric f (fx1, fy1) (fx3, fy3) then begin
+			    if (f.state != Occupied) then
+			      f.state <- Partially_Free;
+			    f.bouldercraters <- bcr :: f.bouldercraters
+			  end
 		      | _ -> (* partly inside *)
 			  if (f.state != Occupied) then
 			    f.state <- Partially_Free;
@@ -187,9 +195,9 @@ let register_boldercrater board bcr =
 	  match discrete_inner_range board
 	    (f_x -. f_h, f_y -. f_h) (f_x +. f_h, f_y +. f_h) with
 		Some (c1, c2) ->
-		  printf "checking inner range: %f,%f - %f,%f [%i,%i - %i,%i]\n"
+(*		  printf "checking inner range: %f,%f - %f,%f [%i,%i - %i,%i]\n"
 		    (f_x -. f_h) (f_y -. f_h) (f_x +. f_h) (f_y +. f_h)
-		    (fst c1) (snd c1) (fst c2) (snd c2);
+		    (fst c1) (snd c1) (fst c2) (snd c2); *)
 		flag_as_occupied board c1 c2 bcr
 	    | None -> () (* inner range might be empty *);
 	end;
@@ -197,9 +205,9 @@ let register_boldercrater board bcr =
 	let c1, c2 = discrete_outer_range board
 	  (f_x -. f_r, f_y -. f_r) (f_x +. f_r, f_y +. f_r)
 	in
-	  printf "checking outer range: %f,%f - %f,%f [%i,%i - %i,%i]\n"
+(*	  printf "checking outer range: %f,%f - %f,%f [%i,%i - %i,%i]\n"
 	    (f_x -. f_r) (f_y -. f_r) (f_x +. f_r) (f_y +. f_r)
-	    (fst c1) (snd c1) (fst c2) (snd c2);
+	    (fst c1) (snd c1) (fst c2) (snd c2); *)
 	  check_for_occupied c1 c2
   end
 
