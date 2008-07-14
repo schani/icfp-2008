@@ -330,12 +330,12 @@ let world_step world socket =
 		(string_of_state (t.speeding,t.turning));
 	     *)
 	    
-	    (match world.world_current_telemetry with
+	    (*match world.world_current_telemetry with
 	      | Some(t) -> 
 		  Printf.fprintf stderr "Emp ist ein LUEGER: %d %d\n" t.x t.y;
 	      | None ->
 		  Printf.fprintf stderr "Emp ist kein LUEGER:\n"
-	    );
+	      *)
 
 	    let rec sending_loop world = 
 	      let command = Statemachines.both_change_to world.world_vehicle_state wantedstate in
