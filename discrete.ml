@@ -154,8 +154,22 @@ let register_boldercrater board bcr =
 	  if fx1 < f_x && f_x < fx3 &&
 	    fy1 < f_y && f_y < fy3 then
 	      true
-	  else
-	    false
+	  else (* now we know that middle of circle is not in field
+	       *)
+	    if fx1 < f_x && f_x < fx3 && fy3 < f_y && (f_y -. fy3) < f_r then (* circle must be north *)
+	      true
+	    else
+	      if fx1 < f_x && f_x < fx3 && fy1 > f_y && (fy1 -. f_y) < f_r then (* south *)
+		true
+	      else
+		if fy1 < f_y && f_y < fy3 && fx1 > f_x &&(fx1 -. f_x) < f_r then (* west *)
+		  true
+		else
+		  if fy1 < f_y && f_y < fy3 && fx3 < f_x && (f_x -. fx3) < f_r then (* east *)
+		    true
+		  else
+		    false
+	      
       in let check_for_occupied (x1, y1) (x2, y2) =
 	  for xi = x1 to x2 do
 	    for yi = y1 to y2 do

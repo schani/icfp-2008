@@ -85,7 +85,7 @@ let draw_background board (drawing: GDraw.drawable) =
 	    drawing#rectangle ~filled:false
 	      ~x:(rnd (fdrxdim *. (foi xi) /. rxdim))
 	      ~y:(rnd (fdrydim -. fdrydim *. (foi yi) /. rydim -. (foi ybs)))
-	      ~width:xbs ~height:ybs ();
+	      ~width:(xbs - 1) ~height:(ybs - 1) ();
 	  end
       done
     done
@@ -178,3 +178,4 @@ let main () =
 
 let _ =
   main ()
+
