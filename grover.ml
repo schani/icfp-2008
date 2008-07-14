@@ -1,23 +1,28 @@
 open Printf
 open Telemetry
 
-let drawing_xdim = ref 1000
-let drawing_ydim = ref 1000
+let drawing_xdim = ref 800
+let drawing_ydim = ref 800
+let f_drawing_xdim = ref 800.0
+let f_drawing_ydim = ref 800.0
+
+let round x = int_of_float (floor (x +. 0.5))
+let foi = float_of_int
 
 let drawlength_of_gamelength board (x,y) =
-  (x * !drawing_xdim / board.fxdim,
-   y * !drawing_ydim / board.fydim)
+  round ((foi x) *. !f_drawing_xdim /. board.f_rxdim),
+  round ((foi y) *. !f_drawing_ydim /. board.f_rydim)
 
 let drawcoords_of_gamecoords board (x,y) =
-  let fxshift = board.fxdim / 2
-  and fyshift = board.fydim / 2
+  let fxshift = board.rxdim / 2
+  and fyshift = board.rydim / 2
   in
-    ((x + fxshift) * !drawing_xdim / board.fxdim,
-     (!drawing_ydim - (y + fyshift) * !drawing_ydim / board.fydim))
+    ((x + fxshift) * !drawing_xdim / board.rxdim,
+     (!drawing_ydim - (y + fyshift) * !drawing_ydim / board.rydim))
 
 let create_main_window () =
-  let win = GWindow.window ~width:1000 ~height:1000 ()
-  in let area = GMisc.drawing_area ~width:1000 ~height:1000 ~packing:win#add ()
+  let win = GWindow.window ~width:800 ~height:800 ()
+  in let area = GMisc.drawing_area ~width:800 ~height:800 ~packing:win#add ()
   in let drawing = area#misc#realize (); new GDraw.drawable (area#misc#window)
   in let style = area#misc#style#copy
   in
@@ -37,10 +42,13 @@ let draw_bc board (drawing: GDraw.drawable) bcr =
       ~width:(rx * 2) ~height:(ry * 2) ()
 
 let draw_background board (drawing: GDraw.drawable) =
-  let xbs = !drawing_xdim / board.xdim
-  and ybs = !drawing_ydim / board.ydim
+  let fdrxdim = float_of_int !drawing_xdim
+  and fdrydim = float_of_int !drawing_ydim
+  and rxdim = float_of_int board.xdim
+  and rydim = float_of_int board.ydim
+  in let xbs = round (fdrxdim /. rxdim)
+     and ybs = round (fdrydim /. rydim)
   in
-    board.fields.(1).(1).state <- Free;
     for yi = 0 to (board.ydim - 1)
     do
       for xi = 0 to (board.xdim - 1)
@@ -52,12 +60,11 @@ let draw_background board (drawing: GDraw.drawable) =
 					       Free -> "darkgreen"
 					     | Occupied -> "darkred"
 					     | Partially_Free ->
-						 prerr_endline "PARTLY";
-						 "gray"
+						 "darkgray"
 					     | _ -> "white" ));
 	    drawing#rectangle ~filled:true
-	      ~x:(!drawing_xdim * xi / board.xdim)
-	      ~y:(!drawing_ydim - !drawing_ydim * yi / board.ydim)
+	      ~x:(round (fdrxdim *. (foi xi) /. rxdim))
+	      ~y:(round (fdrydim -. fdrydim *. (foi yi) /. rydim -. (foi ybs)))
 	      ~width:xbs ~height:ybs ();
 	  end
       done
@@ -71,15 +78,26 @@ let draw_homebase board (drawing: GDraw.drawable) =
     drawing#arc ~filled:false ~x:(dx - rx) ~y:(dy - ry)
       ~width:(rx * 2) ~height:(ry * 2) ()
 
+let drawing_hacks board (drawing: GDraw.drawable) =
+  for i = 0 to board.xdim - 1
+  do
+    board.fields.(i).(i).state <- Occupied;
+  done;
+  drawing#set_foreground (`NAME "white");
+  drawing#line 0 !drawing_ydim !drawing_xdim 0
+
 let redraw_world world (area: GMisc.drawing_area) (drawing: GDraw.drawable) _ =
   let x,y = drawing#size;
   and board = !world.world_board
   in
     drawing_xdim := x;
+    f_drawing_xdim := float_of_int x;
     drawing_ydim := y;
+    f_drawing_ydim := float_of_int y;
     draw_background board drawing;
     draw_homebase board drawing;
     BCRecorder.iter (draw_bc board drawing) board.bcrecorder;
+    drawing_hacks board drawing;
     true
 
 let server_msg_callback world socket =
@@ -117,8 +135,8 @@ let main () =
     in
       ignore (area#event#connect#expose
 		~callback:(redraw_world world area drawing));
-      GMain.Io.add_watch ch ~prio:0 ~cond:[`IN; `HUP; `ERR]
-	~callback:input_callback;
+      ignore (GMain.Io.add_watch ch ~prio:0 ~cond:[`IN; `HUP; `ERR]
+		~callback:input_callback);
       ignore (GMain.Idle.add (redraw_world world area drawing));
       GMain.Main.main ()
 

@@ -1,6 +1,7 @@
 (* FIXME: diid overflow must be catched *)
 
 open Telemetry
+open Printf
 
 let pi = 3.1415926535897932384626433
   
@@ -25,11 +26,17 @@ let make_array_array x y f =
 let create_board x y fx fy minsens maxsens =
   {
     xdim = x;
+    f_xdim = float_of_int x;
     ydim = y;
-    fxdim = fx;
-    fydim = fy;
+    f_ydim = float_of_int y;
+    rxdim = fx;
+    f_rxdim = float_of_int fx;
+    rydim = fy;
+    f_rydim = float_of_int fy;
     minsens = minsens;
+    f_minsens = float_of_int minsens;
     maxsens = maxsens;
+    f_maxsens = float_of_int maxsens;
     fields = make_array_array x y (fun _ -> {
 				     state = Unknown;
 				     bouldercraters = [];
@@ -53,26 +60,26 @@ let incr_coords (x,y) = function
 (* this returns 4 coords of the corners of the discrete field,
    first south west then clockwise *)
 let undiscretize_coords board (x,y) =
-  let multx = board.fxdim / board.xdim
-  and shiftx = board.fxdim / 2
-  and multy = board.fydim / board.ydim
-  and shifty = board.fydim / 2
+  let multx = board.rxdim / board.xdim
+  and shiftx = board.rxdim / 2
+  and multy = board.rydim / board.ydim
+  and shifty = board.rydim / 2
   in
-    (((x * multx + shiftx), (y * multy + shifty)),
-     ((x * multx + shiftx), (y * multy + shifty + multy)),
-     ((x * multx + shiftx + multx), (y * multy + shifty + multy)),
-     ((x * multx + shiftx + multx), (y * multy + shifty)))
+    (((x * multx - shiftx), (y * multy - shifty)),
+     ((x * multx - shiftx), (y * multy - shifty + multy)),
+     ((x * multx - shiftx + multx), (y * multy - shifty + multy)),
+     ((x * multx - shiftx + multx), (y * multy - shifty)))
 
 let discretize_coords board (fx,fy) =
-  (board.xdim * fx / board.fxdim + board.xdim / 2,
-   board.ydim * fy / board.fydim + board.ydim /
+  (board.xdim * fx / board.rxdim + board.xdim / 2,
+   board.ydim * fy / board.rydim + board.ydim /
      
 (* tests:
-  discretize_coords { xdim = 9; ydim = 9; fxdim = 90; fydim = 90 } (0,0)
+  discretize_coords { xdim = 9; ydim = 9; rxdim = 90; rydim = 90 } (0,0)
 
-  discretize_coords { xdim = 9; ydim = 9; fxdim = 90; fydim = 90 } (-50,-50)
+  discretize_coords { xdim = 9; ydim = 9; rxdim = 90; rydim = 90 } (-50,-50)
   
-  discretize_coords { xdim = 9; ydim = 9; fxdim = 90; fydim = 90 } (39,40)
+  discretize_coords { xdim = 9; ydim = 9; rxdim = 90; rydim = 90 } (39,40)
 *)
 
 2)
@@ -108,14 +115,17 @@ let register_boldercrater board bcr =
   in
     if BCRecorder.mem bcr board.bcrecorder then (* prohibits doulbes *)
       ()
-    else (* skip circles that are already known *)
+    else begin (* skip circles that are already known *)
+      fprintf stdout "registering bouldercrater at %i,%i\n" x y;
       board.bcrecorder <- BCRecorder.add bcr board.bcrecorder;
       let rsquare = r * r
       in let check_inside (cx, cy) =
-	  if (x - cx) * (x - cx) + (y - cy) * (y - cy) < rsquare then
-	    1 (* inside *)
-	  else
-	    (-1) (* outside *)
+(*	  fprintf stdout "check_inside (%i, %i)   circ at (%i, %i, r=%i)\n"
+	    cx cy x y r; *)
+	   if (x - cx) * (x - cx) + (y - cy) * (y - cy) < rsquare then
+	     1 (* inside *)
+	   else
+	     (-1) (* outside *)
       in let flag_as_occupied board (x1, y1) (x2, y2) bcr =
 	  for xi = x1 to x2 do
 	    for yi = y1 to y2 do
@@ -145,7 +155,8 @@ let register_boldercrater board bcr =
 			4 -> (* fully inside *)
 			  f.state <- Occupied; 
 			  f.bouldercraters <- bcr :: f.bouldercraters
-		      | (-4) -> () (* outside *)
+		      | (-4) ->
+			  () (* outside *)
 		      | _ -> (* partly inside *)
 			  if (f.state != Occupied) then
 			    f.state <- Partially_Free;
@@ -158,12 +169,20 @@ let register_boldercrater board bcr =
       in
 	begin
 	  match discrete_inner_range board (x - h, y - h) (x + h, y + h) with
-	      Some (c1, c2) -> flag_as_occupied board c1 c2 bcr
+	      Some (c1, c2) ->
+		printf "checking inner range: %i,%i - %i,%i [%i,%i - %i,%i]\n"
+		  (x - h) (y - h) (x + h) (y + h)
+		  (fst c1) (snd c1) (fst c2) (snd c2);
+		flag_as_occupied board c1 c2 bcr
 	    | None -> () (* inner range might be empty *);
 	end;
 	let c1, c2 = discrete_outer_range board (x - r, y - r) (x + r, y + r)
 	in
+	  printf "checking outer range: %i,%i - %i,%i [%i,%i - %i,%i]\n"
+		  (x - r) (y - r) (x + r) (y + r)
+	    (fst c1) (snd c1) (fst c2) (snd c2);
 	  check_for_occupied c1 c2
+    end
 
 (* API: this can be used to register the view ellipse, works like
    register_boldercrater but marks space as free not occupied.

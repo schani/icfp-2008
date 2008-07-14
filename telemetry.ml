@@ -60,11 +60,17 @@ module BCRecorder = Set.Make(BCRecorderEntry)
 
 type board = {
   xdim: int;
+  f_xdim: float;
   ydim: int;
-  fxdim: int;
-  fydim: int;
+  f_ydim: float;
+  rxdim: int;
+  f_rxdim: float;
+  rydim: int;
+  f_rydim: float;
   minsens: int;
+  f_minsens: float;
   maxsens: int;
+  f_maxsens: float;
   fields: (field array) array;
   mutable bcrecorder: Set.Make(BCRecorderEntry).t;
 }

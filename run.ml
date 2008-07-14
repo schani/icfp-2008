@@ -227,7 +227,7 @@ let world_init socket =
       world_min_speed = (init.imax_sensor / 10); 
       world_dst = 0,0;
       world_really_close = 50*1000;
-      world_board = Discrete.create_board 200 200 init.idx init.idy
+      world_board = Discrete.create_board 51 51 init.idx init.idy
 	init.imin_sensor init.imax_sensor;
       world_last_step = Event;
       world_acceleration_tracker = init_accel_tracker;
