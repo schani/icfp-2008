@@ -75,9 +75,10 @@ let draw_homebase board (drawing: GDraw.drawable) =
   let f_dx, f_dy = drawcoords_of_gamecoords board (0, 0)
   and f_rx, f_ry = drawlength_of_gamelength board (2500, 2500)
   in
+    (*
     printf "drawing homebase at %f,%f (%i,%i size: %i,%i)\n" f_dx f_dy
       (rnd (f_dx -. f_rx)) (rnd (f_dy -. f_ry))
-      (rnd (f_rx *. 2.)) (rnd (f_ry *. 2.));
+      (rnd (f_rx *. 2.)) (rnd (f_ry *. 2.)); *)
     drawing#set_foreground (`NAME "green");
     drawing#arc ~filled:false ~x:(rnd (f_dx -. f_rx)) ~y:(rnd (f_dy -. f_ry))
       ~width:(rnd (f_rx *. 2.)) ~height:(rnd (f_ry *. 2.)) ()
@@ -101,7 +102,7 @@ let redraw_world world (area: GMisc.drawing_area) (drawing: GDraw.drawable) _ =
     draw_background board drawing;
     draw_homebase board drawing;
     BCRecorder.iter (draw_bc board drawing) board.bcrecorder;
-    drawing_hacks board drawing;
+(*    drawing_hacks board drawing; *)
     true
 
 let server_msg_callback world socket =

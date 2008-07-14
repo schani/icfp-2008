@@ -110,7 +110,7 @@ let discrete_outer_range board (fx1, fy1) (fx2, fy2) =
       (iof (floor x1), iof (floor y1)), (iof (ceil x2), iof (ceil y2))
   in
     (((sinvollify_coord board.xdim x1), (sinvollify_coord board.ydim y1)),
-     ((sinvollify_coord board.xdim x1), (sinvollify_coord board.ydim y1)))
+     ((sinvollify_coord board.xdim x2), (sinvollify_coord board.ydim y2)))
 
 (* API: this can be used to register a geometric circle into the
    discrete map.
@@ -134,10 +134,10 @@ let register_boldercrater board bcr =
       board.bcrecorder <- BCRecorder.add bcr board.bcrecorder;
       let f_rsquare = f_r *. f_r
       in let check_inside (cx, cy) =
-	  (*	  fprintf stdout "check_inside (%i, %i)   circ at (%i, %i, r=%i)\n"
-		  cx cy x y r; *)
+	  (* fprintf stdout "check_inside (%i, %i)   circ at (%i, %i, r=%i)\n"
+	     cx cy x y r; *)
 	  if (f_x -. cx) *. (f_x -. cx) +.
-	    (f_y -. cy) *. (f_y -. cy) < f_rsquare then
+	    (f_y -. cy) *. (f_y -. cy) <= f_rsquare then
 	      1 (* inside *)
 	  else
 	    (-1) (* outside *)
@@ -166,8 +166,10 @@ let register_boldercrater board bcr =
 		    count_inside := !count_inside + check_inside (fx2,fy2);
 		    count_inside := !count_inside + check_inside (fx3,fy3);
 		    count_inside := !count_inside + check_inside (fx4,fy4);
+		    printf "cound_inside is %i\n" !count_inside;
 		    match !count_inside with
 			4 -> (* fully inside *)
+			  printf "SAUBUA DEPPATA\n";
 			  f.state <- Occupied; 
 			  f.bouldercraters <- bcr :: f.bouldercraters
 		      | (-4) ->
@@ -180,6 +182,7 @@ let register_boldercrater board bcr =
 	  done
       in let f_h = f_r /. sqrt(2.0);
       in
+	(*
 	begin
 	  match discrete_inner_range board
 	    (f_x -. f_h, f_y -. f_h) (f_x +. f_h, f_y +. f_h) with
@@ -190,6 +193,7 @@ let register_boldercrater board bcr =
 		flag_as_occupied board c1 c2 bcr
 	    | None -> () (* inner range might be empty *);
 	end;
+	*)
 	let c1, c2 = discrete_outer_range board
 	  (f_x -. f_r, f_y -. f_r) (f_x +. f_r, f_y +. f_r)
 	in
@@ -265,12 +269,14 @@ let register_ellipse board (r1x, r1y) angle =
 	done
       done
   in
+    (*
     begin
       match discrete_inner_range board
 	(f_mx -. f_h, f_my -. f_h) (f_mx +. f_h, f_my +. f_h) with
 	    Some (c1, c2) -> flag_as_free board c1 c2
 	  | None -> () (* inner range might be empty *);
     end;
+    *)
     let c1, c2 = discrete_outer_range board
       (f_mx -. a, f_my -. a) (f_mx +. a, f_my +. a)
     in
