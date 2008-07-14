@@ -103,12 +103,14 @@ let compute_undisc_middle board (x,y) =
      rnd ((foi y) *. f_multy -. f_shifty +. f_multy /. 2.))
 *)
 
+
 let compute_undisc_middle board (x,y) =
   let (fx1,fy1), (fx2,fy2), (fx3,fy3), (fx4,fy4) =
     undiscretize_coords board (x,y)
   in
-    (iof (fx1 +. (fx3 -. fx1) /. 2.),
-     iof (fy1 +. (fy3 -. fy1) /. 2.))
+    (iof (fx1 +. ((fx3 -. fx1) /. 2.)),
+     iof (fy1 +. ((fy3 -. fy1) /. 2.)))
+
 
 let discretize_coords board (fx,fy) =
   (board.f_xdim *. (foi fx) /. board.f_rxdim +. board.f_xdim /. 2.,
@@ -441,7 +443,7 @@ let rec real_dijkstra_find_path board (ox, oy) (dx, dy) =
 		     Partially_Free -> 300
 		   | _ -> 0) +
 		d.dijkstra_homebase_cost * 10 +
-		d.enemy_penalty (* +
+		 d.enemy_penalty (* +
 		(match s.dijkstra_prev with
 		     x when x = negdir -> (-2) (* keeping diretion -> bonus *)
 		   | x when x = dir -> 2 (* u-turn -> malus *)
@@ -494,7 +496,7 @@ let rec real_dijkstra_find_path board (ox, oy) (dx, dy) =
 	      let prev = board.fields.(y).(x).dijkstra_prev
 	      in
 		if prev == Start then
-		  result
+		  (x,y) :: result
 		else
 		  tracegoal (incr_coords (x,y) prev) ((x, y) :: result)
 	    in
@@ -502,6 +504,7 @@ let rec real_dijkstra_find_path board (ox, oy) (dx, dy) =
 	      let tg = tracegoal (x, y) []
 	      in
 		printf "\n"; flush stdout;
+		printf "tracegoal result list was %i\n" (List.length tg);
 		tg
 	  else begin
 	    check_neighbours f x y;
